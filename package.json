@@ -1,0 +1,39 @@
+{
+  "name": "chat-app",
+  "version": "1.0.0",
+  "description": "",
+  "main": "main.js",
+  "scripts": {
+    "start": "npm --prefix backend start",
+    "build": "npm --prefix frontend install && npm --prefix frontend run build && npm --prefix backend install",
+    "electron-start": "electron .",
+    "dist": "electron-builder",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "build": {
+    "appId": "com.chatapp.desktop",
+    "productName": "Chat App",
+    "mac": {
+      "target": "dmg",
+      "identity": null
+    },
+    "asar": false,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "package.json",
+      "backend/**/*",
+      "frontend/build/**/*"
+    ]
+  },
+  "devDependencies": {
+    "electron": "^40.8.0",
+    "electron-builder": "^26.8.1"
+  }
+}
