@@ -1,0 +1,19 @@
+body {
+  font-family: Arial, sans-serif;
+  background: #f4f4f4;
+  color: #333;
+}
+.App {
+  max-width: 600px;
+  margin: auto;
+  padding: 2em;
+  background: white;
+  border-radius: 8px;
+}
+input {
+  margin: 0.5em;
+  padding: 0.5em;
+}
+button {
+  padding: 0.5em 1em;
+}
