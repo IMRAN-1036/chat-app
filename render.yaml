@@ -7,3 +7,7 @@ services:
     envVars:
       - key: PORT
         value: 2000
+      - key: CI
+        value: false
+      - key: NODE_OPTIONS
+        value: --max_old_space_size=400
