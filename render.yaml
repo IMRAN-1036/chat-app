@@ -3,7 +3,8 @@ services:
     name: chat-app
     env: node
     buildCommand: npm run build
-    startCommand: npm start
+    startCommand: node backend/index.js
+    healthCheckPath: /api/chat
     envVars:
       - key: PORT
         value: 2000
