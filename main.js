@@ -1,8 +1,15 @@
-const { app, BrowserWindow } = require('electron');
+const electron = require('electron');
 const path = require('path');
 const { fork } = require('child_process');
 
-let mainWindow;
+if (!electron || !electron.app) {
+  // Render.com is running `node main.js`, so we skip Electron and just run the backend.
+  console.log("🚀 Standard Node environment detected (Electron app is undefined). Running Backend exclusively...");
+  require('./backend/index.js');
+} else {
+  const { app, BrowserWindow } = electron;
+
+  let mainWindow;
 let serverProcess;
 
 function createWindow() {
@@ -65,8 +72,9 @@ app.on('window-all-closed', () => {
   }
 });
 
-app.on('quit', () => {
-  if (serverProcess) {
-    serverProcess.kill();
-  }
-});
+  app.on('quit', () => {
+    if (serverProcess) {
+      serverProcess.kill();
+    }
+  });
+} // End of conditional block
