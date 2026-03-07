@@ -2,7 +2,8 @@
   "name": "chat-app",
   "version": "1.0.0",
   "description": "",
-  "main": "main.js",
+  "main": "backend/index.js",
+  "electron-main": "main.js",
   "scripts": {
     "start": "npm --prefix backend start",
     "build": "npm --prefix frontend install && npm --prefix frontend run build && npm --prefix backend install",
