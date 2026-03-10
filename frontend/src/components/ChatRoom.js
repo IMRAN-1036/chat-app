@@ -1,6 +1,22 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import axios from "axios";
 
+const EMOJI_LIST = [
+  // Smileys
+  "😀","😂","🤣","😊","😍","🥰","😘","😎","🤩","🥳",
+  "😇","🤗","🤔","🤫","🤭","😏","😌","😴","🥱","😜",
+  "😝","🤪","🤓","😤","😠","🤯","😱","😈","💀","👻",
+  // Gestures
+  "👍","👎","👏","🙌","🤝","✌️","🤞","🤟","🤙","💪",
+  "👊","✊","🫶","❤️","🔥","⭐","✨","💯","🎉","🎊",
+  // Objects
+  "💬","💭","🗯️","💡","📌","📍","🎯","🏆","🎵","🎶",
+  // Nature
+  "🌟","🌈","☀️","🌙","⚡","💧","🌸","🍀","🦋","🐱",
+  // Food
+  "☕","🍕","🍔","🎂","🍰","🍫","🍿","🥤","🍹","🧃",
+];
+
 function timeAgo(date) {
   const seconds = Math.floor((new Date() - new Date(date)) / 1000);
   if (seconds < 10) return "Just now";
@@ -18,8 +34,18 @@ export default function ChatRoom({ folder, onBack, addToast }) {
   const [username, setUsername] = useState("");
   const [showUsernameModal, setShowUsernameModal] = useState(false);
   const [usernameInput, setUsernameInput] = useState("");
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [typingUsers, setTypingUsers] = useState([]);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [newMsgCount, setNewMsgCount] = useState(0);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+
   const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
   const inputRef = useRef(null);
+  const emojiPanelRef = useRef(null);
+  const lastTypingSentRef = useRef(0);
+  const prevMsgCountRef = useRef(messages.length);
 
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:2000";
 
@@ -33,30 +59,105 @@ export default function ChatRoom({ folder, onBack, addToast }) {
     }
   }, []);
 
-  // Auto-scroll to bottom
+  // Close emoji picker on outside click
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    const handleClickOutside = (e) => {
+      if (emojiPanelRef.current && !emojiPanelRef.current.contains(e.target)) {
+        setShowEmojiPicker(false);
+      }
+    };
+    if (showEmojiPicker) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showEmojiPicker]);
 
-  // Fetch messages from backend
+  // Scroll detection
+  const handleScroll = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    const threshold = 100;
+    const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+    setIsAtBottom(atBottom);
+    setShowScrollBtn(!atBottom);
+    if (atBottom) {
+      setNewMsgCount(0);
+    }
+  }, []);
+
+  // Auto-scroll only if user is at the bottom
+  useEffect(() => {
+    if (isAtBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    } else {
+      // Count new messages while scrolled up
+      const diff = messages.length - prevMsgCountRef.current;
+      if (diff > 0) {
+        setNewMsgCount((prev) => prev + diff);
+      }
+    }
+    prevMsgCountRef.current = messages.length;
+  }, [messages, isAtBottom]);
+
+  // Poll for messages + typing users
   const fetchMessages = useCallback(async () => {
     try {
-      const res = await axios.post(`${API_URL}/api/chat/find`, {
+      const res = await axios.post(`${API_URL}/api/chat/poll`, {
         password: folder.password,
       });
-      if (res.data && res.data.messages) {
-        setMessages(res.data.messages);
+      if (res.data) {
+        if (res.data.messages) {
+          setMessages(res.data.messages);
+        }
+        if (res.data.typingUsers) {
+          // Filter out current user from typing list
+          setTypingUsers(
+            res.data.typingUsers.filter((u) => u !== username)
+          );
+        }
       }
     } catch (err) {
       // silently ignore polling errors
     }
-  }, [API_URL, folder.password]);
+  }, [API_URL, folder.password, username]);
 
-  // Auto-refresh every 3 seconds
+  // Send read receipts for unread messages
+  const sendReadReceipts = useCallback(async (msgs) => {
+    if (!username) return;
+    const unreadIds = msgs
+      .filter((msg) => {
+        if (msg.sender === username) return false;
+        if (!msg.readBy) return true;
+        return !msg.readBy.some((r) => r.username === username);
+      })
+      .map((msg) => msg._id)
+      .filter(Boolean);
+
+    if (unreadIds.length > 0) {
+      try {
+        await axios.post(`${API_URL}/api/chat/read`, {
+          password: folder.password,
+          username,
+          messageIds: unreadIds,
+        });
+      } catch (err) {
+        // silently ignore
+      }
+    }
+  }, [API_URL, folder.password, username]);
+
+  // Auto-refresh every 2 seconds
   useEffect(() => {
-    const interval = setInterval(fetchMessages, 3000);
+    const interval = setInterval(fetchMessages, 2000);
     return () => clearInterval(interval);
   }, [fetchMessages]);
+
+  // Send read receipts when messages update
+  useEffect(() => {
+    if (messages.length > 0 && username) {
+      sendReadReceipts(messages);
+    }
+  }, [messages, username, sendReadReceipts]);
 
   const handleSaveUsername = () => {
     const name = usernameInput.trim();
@@ -68,6 +169,28 @@ export default function ChatRoom({ folder, onBack, addToast }) {
     setTimeout(() => inputRef.current?.focus(), 100);
   };
 
+  // Send typing indicator (debounced — max once per 2s)
+  const sendTypingIndicator = useCallback(async () => {
+    const now = Date.now();
+    if (now - lastTypingSentRef.current < 2000) return;
+    lastTypingSentRef.current = now;
+    try {
+      await axios.post(`${API_URL}/api/chat/typing`, {
+        password: folder.password,
+        username,
+      });
+    } catch (err) {
+      // silently ignore
+    }
+  }, [API_URL, folder.password, username]);
+
+  const handleInputChange = (e) => {
+    setText(e.target.value);
+    if (e.target.value.trim()) {
+      sendTypingIndicator();
+    }
+  };
+
   const handleSend = async () => {
     if (!text.trim()) return;
 
@@ -76,18 +199,28 @@ export default function ChatRoom({ folder, onBack, addToast }) {
 
     // Optimistic update
     const optimisticMsg = {
+      _id: `optimistic_${Date.now()}`,
       sender: username,
       text: msgText,
       timestamp: new Date().toISOString(),
+      readBy: [],
     };
     setMessages((prev) => [...prev, optimisticMsg]);
 
+    // Auto-scroll to bottom when sending
+    setIsAtBottom(true);
+    setNewMsgCount(0);
+
     try {
-      await axios.post(`${API_URL}/api/chat/message`, {
+      const res = await axios.post(`${API_URL}/api/chat/message`, {
         password: folder.password,
         sender: username,
         text: msgText,
       });
+      // Replace optimistic messages with server data immediately
+      if (res.data && res.data.folder) {
+        setMessages(res.data.folder.messages);
+      }
     } catch (err) {
       addToast("Failed to send message", "error");
     }
@@ -100,6 +233,25 @@ export default function ChatRoom({ folder, onBack, addToast }) {
       e.preventDefault();
       handleSend();
     }
+  };
+
+  const handleEmojiClick = (emoji) => {
+    setText((prev) => prev + emoji);
+    setShowEmojiPicker(false);
+    inputRef.current?.focus();
+  };
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    setShowScrollBtn(false);
+    setNewMsgCount(0);
+    setIsAtBottom(true);
+  };
+
+  const getReadCount = (msg) => {
+    if (!msg.readBy) return 0;
+    // Don't count the sender's own read
+    return msg.readBy.filter((r) => r.username !== msg.sender).length;
   };
 
   // Username modal
@@ -152,7 +304,11 @@ export default function ChatRoom({ folder, onBack, addToast }) {
       </div>
 
       {/* Messages */}
-      <div className="chat-messages">
+      <div
+        className="chat-messages"
+        ref={messagesContainerRef}
+        onScroll={handleScroll}
+      >
         {messages.length === 0 ? (
           <div className="chat-messages-empty">
             <div className="empty-icon">💭</div>
@@ -164,9 +320,10 @@ export default function ChatRoom({ folder, onBack, addToast }) {
         ) : (
           messages.map((msg, i) => {
             const isSent = msg.sender === username;
+            const readCount = getReadCount(msg);
             return (
               <div
-                key={i}
+                key={msg._id || i}
                 className={`message-row ${isSent ? "sent" : "received"}`}
               >
                 <div className="message-bubble">
@@ -174,7 +331,25 @@ export default function ChatRoom({ folder, onBack, addToast }) {
                     <div className="message-sender">{msg.sender}</div>
                   )}
                   <div className="message-text">{msg.text}</div>
-                  <div className="message-time">{timeAgo(msg.timestamp)}</div>
+                  <div className="message-meta">
+                    <span className="message-time">
+                      {timeAgo(msg.timestamp)}
+                    </span>
+                    {isSent && (
+                      <span className="read-receipt">
+                        {readCount > 0 ? (
+                          <>
+                            <span className="check-double">✓✓</span>
+                            <span className="read-count">
+                              Read by {readCount}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="check-single">✓</span>
+                        )}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -183,15 +358,52 @@ export default function ChatRoom({ folder, onBack, addToast }) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
+      {/* Scroll to bottom button */}
+      {showScrollBtn && (
+        <button
+          className="scroll-to-bottom"
+          onClick={scrollToBottom}
+          id="scroll-bottom-btn"
+        >
+          ↓
+          {newMsgCount > 0 && (
+            <span className="scroll-badge">{newMsgCount}</span>
+          )}
+        </button>
+      )}
+
+      {/* Typing indicator */}
+      {typingUsers.length > 0 && (
+        <div className="typing-indicator">
+          <div className="typing-dots">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <span className="typing-text">
+            {typingUsers.length === 1
+              ? `${typingUsers[0]} is typing`
+              : `${typingUsers.join(", ")} are typing`}
+          </span>
+        </div>
+      )}
+
+      {/* Input Area */}
       <div className="chat-input-area">
+        <button
+          className="emoji-btn"
+          onClick={() => setShowEmojiPicker((prev) => !prev)}
+          id="emoji-toggle-btn"
+        >
+          😊
+        </button>
         <input
           ref={inputRef}
           type="text"
           className="chat-text-input"
           placeholder="Type a message..."
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           autoFocus
           id="message-input"
@@ -204,6 +416,24 @@ export default function ChatRoom({ folder, onBack, addToast }) {
         >
           ➤
         </button>
+
+        {/* Emoji Picker */}
+        {showEmojiPicker && (
+          <div className="emoji-panel" ref={emojiPanelRef}>
+            <div className="emoji-panel-header">Emojis</div>
+            <div className="emoji-grid">
+              {EMOJI_LIST.map((emoji, i) => (
+                <button
+                  key={i}
+                  className="emoji-item"
+                  onClick={() => handleEmojiClick(emoji)}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
