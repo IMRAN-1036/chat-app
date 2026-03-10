@@ -12,61 +12,53 @@ const EMOJI_LIST = [
   "🌟","🌈","☀️","🌙","⚡","💧","🌸","🍀","🦋","🐱",
   "☕","🍕","🍔","🎂","🍰","🍫","🍿","🥤","🍹","🧃",
 ];
-const QUICK_REACTIONS = ["😂","❤️","👍","😮","😢","🔥"];
+const QUICK_REACTIONS = ["😂", "❤️", "👍", "😮", "😢", "🔥"];
 
-/* ===== Avatar color generator ===== */
+/* ===== Avatar ===== */
 function getAvatarColor(name) {
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  const hue = Math.abs(hash) % 360;
-  return `hsl(${hue}, 60%, 50%)`;
+  return `hsl(${Math.abs(hash) % 360}, 60%, 50%)`;
 }
-function getInitials(name) {
-  return name.slice(0, 2).toUpperCase();
-}
+function getInitials(name) { return name.slice(0, 2).toUpperCase(); }
 
-/* ===== Time formatting ===== */
+/* ===== Time ===== */
 function timeAgo(date) {
-  const seconds = Math.floor((new Date() - new Date(date)) / 1000);
-  if (seconds < 10) return "now";
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h`;
+  const s = Math.floor((new Date() - new Date(date)) / 1000);
+  if (s < 10) return "now";
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
   return new Date(date).toLocaleDateString();
 }
-
 function getDateLabel(date) {
   const d = new Date(date);
   const today = new Date();
-  const yesterday = new Date();
-  yesterday.setDate(today.getDate() - 1);
+  const yest = new Date(); yest.setDate(today.getDate() - 1);
   if (d.toDateString() === today.toDateString()) return "Today";
-  if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
+  if (d.toDateString() === yest.toDateString()) return "Yesterday";
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-/* ===== Sound effects (Web Audio API) ===== */
+/* ===== Sound ===== */
 function playSound(type) {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
+    osc.connect(gain); gain.connect(ctx.destination);
     if (type === "send") {
       osc.frequency.value = 600;
       gain.gain.setValueAtTime(0.08, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.12);
+      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.12);
     } else {
       osc.frequency.value = 800;
       gain.gain.setValueAtTime(0.06, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.2);
+      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.2);
     }
   } catch (e) {}
 }
@@ -86,15 +78,11 @@ export default function ChatRoom({ folder, onBack, addToast }) {
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [replyTo, setReplyTo] = useState(null);
   const [copyToast, setCopyToast] = useState(null);
-  const [swipingMsgId, setSwipingMsgId] = useState(null);
-  const [swipeX, setSwipeX] = useState(0);
   const [editingMsgId, setEditingMsgId] = useState(null);
   const [editText, setEditText] = useState("");
   const [pinnedMessages, setPinnedMessages] = useState([]);
   const [showPinned, setShowPinned] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(() => {
-    return localStorage.getItem("chatvault_sound") !== "off";
-  });
+  const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem("chatvault_sound") !== "off");
   const [showReactionPicker, setShowReactionPicker] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
@@ -107,34 +95,44 @@ export default function ChatRoom({ folder, onBack, addToast }) {
   const emojiBtnRef = useRef(null);
   const lastTypingSentRef = useRef(0);
   const prevMsgCountRef = useRef(messages.length);
-  const touchStartRef = useRef({ x: 0, y: 0, msgId: null });
+  const touchStartRef = useRef({ x: 0, y: 0, time: 0, msgId: null });
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const recordingTimerRef = useRef(null);
+  const recordingTimeRef = useRef(0); // FIX: ref for closure
   const audioPlayerRef = useRef(null);
+  const isSendingRef = useRef(false); // FIX: prevent poll overwrite during send
+  const longPressTimerRef = useRef(null);
+  const swipeStateRef = useRef({ msgId: null, x: 0 });
 
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:2000";
 
   // ===== Username =====
   useEffect(() => {
     const saved = localStorage.getItem("chatvault_username");
-    if (saved) setUsername(saved);
-    else setShowUsernameModal(true);
+    if (saved) setUsername(saved); else setShowUsernameModal(true);
   }, []);
 
   // ===== Emoji outside click =====
   useEffect(() => {
-    const handleClickOutside = (e) => {
+    const h = (e) => {
       if (emojiPanelRef.current && !emojiPanelRef.current.contains(e.target) &&
-          emojiBtnRef.current && !emojiBtnRef.current.contains(e.target)) {
-        setShowEmojiPicker(false);
-      }
+          emojiBtnRef.current && !emojiBtnRef.current.contains(e.target)) setShowEmojiPicker(false);
     };
-    if (showEmojiPicker) document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    if (showEmojiPicker) document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
   }, [showEmojiPicker]);
 
-  // ===== Scroll detection =====
+  // Close reaction picker on any tap outside
+  useEffect(() => {
+    if (showReactionPicker) {
+      const h = () => setShowReactionPicker(null);
+      setTimeout(() => document.addEventListener("touchstart", h, { once: true }), 100);
+      return () => document.removeEventListener("touchstart", h);
+    }
+  }, [showReactionPicker]);
+
+  // ===== Scroll =====
   const handleScroll = useCallback(() => {
     const c = messagesContainerRef.current;
     if (!c) return;
@@ -153,15 +151,15 @@ export default function ChatRoom({ folder, onBack, addToast }) {
     prevMsgCountRef.current = messages.length;
   }, [messages, isAtBottom]);
 
-  // ===== Polling =====
+  // ===== Poll (skip while sending) =====
   const fetchMessages = useCallback(async () => {
+    if (isSendingRef.current) return; // FIX: don't overwrite during send
     try {
       const res = await axios.post(`${API_URL}/api/chat/poll`, { password: folder.password });
       if (res.data) {
         const oldLen = prevMsgCountRef.current;
         if (res.data.messages) {
           setMessages(res.data.messages);
-          // Play receive sound for new messages from others
           if (soundEnabled && res.data.messages.length > oldLen) {
             const newest = res.data.messages[res.data.messages.length - 1];
             if (newest && newest.sender !== username) playSound("receive");
@@ -171,48 +169,34 @@ export default function ChatRoom({ folder, onBack, addToast }) {
         if (res.data.onlineUsers) setOnlineUsers(res.data.onlineUsers);
         if (res.data.pinnedMessages) setPinnedMessages(res.data.pinnedMessages);
       }
-    } catch (err) {}
+    } catch (e) {}
   }, [API_URL, folder.password, username, soundEnabled]);
 
   // ===== Read receipts =====
   const sendReadReceipts = useCallback(async (msgs) => {
     if (!username) return;
-    const unreadIds = msgs
-      .filter((m) => m.sender !== username && !m.deletedAt && (!m.readBy || !m.readBy.some((r) => r.username === username)))
-      .map((m) => m._id)
-      .filter(Boolean);
-    if (unreadIds.length > 0) {
-      try { await axios.post(`${API_URL}/api/chat/read`, { password: folder.password, username, messageIds: unreadIds }); } catch (e) {}
-    }
+    const ids = msgs.filter((m) => m.sender !== username && !m.deletedAt && (!m.readBy || !m.readBy.some((r) => r.username === username)))
+      .map((m) => m._id).filter(Boolean);
+    if (ids.length > 0) try { await axios.post(`${API_URL}/api/chat/read`, { password: folder.password, username, messageIds: ids }); } catch (e) {}
   }, [API_URL, folder.password, username]);
 
   // ===== Heartbeat =====
   useEffect(() => {
     if (!username) return;
-    const sendHeartbeat = async () => {
-      try { await axios.post(`${API_URL}/api/chat/heartbeat`, { password: folder.password, username }); } catch (e) {}
-    };
-    sendHeartbeat();
-    const interval = setInterval(sendHeartbeat, 5000);
-    return () => clearInterval(interval);
+    const beat = async () => { try { await axios.post(`${API_URL}/api/chat/heartbeat`, { password: folder.password, username }); } catch (e) {} };
+    beat();
+    const i = setInterval(beat, 5000);
+    return () => clearInterval(i);
   }, [API_URL, folder.password, username]);
 
-  useEffect(() => {
-    const interval = setInterval(fetchMessages, 2000);
-    return () => clearInterval(interval);
-  }, [fetchMessages]);
+  useEffect(() => { const i = setInterval(fetchMessages, 2000); return () => clearInterval(i); }, [fetchMessages]);
+  useEffect(() => { if (messages.length > 0 && username) sendReadReceipts(messages); }, [messages, username, sendReadReceipts]);
 
-  useEffect(() => {
-    if (messages.length > 0 && username) sendReadReceipts(messages);
-  }, [messages, username, sendReadReceipts]);
-
-  // ===== Username save =====
   const handleSaveUsername = () => {
     const name = usernameInput.trim();
     if (!name) return;
     localStorage.setItem("chatvault_username", name);
-    setUsername(name);
-    setShowUsernameModal(false);
+    setUsername(name); setShowUsernameModal(false);
     addToast(`Welcome, ${name}! 👋`, "success");
     setTimeout(() => inputRef.current?.focus(), 100);
   };
@@ -225,124 +209,118 @@ export default function ChatRoom({ folder, onBack, addToast }) {
     try { await axios.post(`${API_URL}/api/chat/typing`, { password: folder.password, username }); } catch (e) {}
   }, [API_URL, folder.password, username]);
 
-  const handleInputChange = (e) => {
-    setText(e.target.value);
-    if (e.target.value.trim()) sendTypingIndicator();
-  };
+  const handleInputChange = (e) => { setText(e.target.value); if (e.target.value.trim()) sendTypingIndicator(); };
 
-  // ===== Send text =====
+  // ===== Send text (with send lock) =====
   const handleSend = async () => {
     if (!text.trim()) return;
     const msgText = text;
     setText("");
-    const optimisticMsg = {
-      _id: `opt_${Date.now()}`, sender: username, text: msgText,
-      timestamp: new Date().toISOString(), readBy: [], reactions: [],
-      replyTo: replyTo || null, type: "text"
-    };
-    setMessages((p) => [...p, optimisticMsg]);
-    setIsAtBottom(true);
-    setNewMsgCount(0);
+    isSendingRef.current = true; // FIX: lock polling
+
+    const opt = { _id: `opt_${Date.now()}`, sender: username, text: msgText, timestamp: new Date().toISOString(), readBy: [], reactions: [], replyTo: replyTo || null, type: "text" };
+    setMessages((p) => [...p, opt]);
+    setIsAtBottom(true); setNewMsgCount(0);
     if (soundEnabled) playSound("send");
 
-    const sendData = { password: folder.password, sender: username, text: msgText };
-    if (replyTo) sendData.replyTo = { messageId: replyTo._id, sender: replyTo.sender, text: replyTo.text };
+    const data = { password: folder.password, sender: username, text: msgText };
+    if (replyTo) data.replyTo = { messageId: replyTo._id, sender: replyTo.sender, text: replyTo.text };
     setReplyTo(null);
+
     try {
-      const res = await axios.post(`${API_URL}/api/chat/message`, sendData);
+      const res = await axios.post(`${API_URL}/api/chat/message`, data);
       if (res.data?.folder) setMessages(res.data.folder.messages);
-    } catch (err) { addToast("Failed to send message", "error"); }
+    } catch (err) { addToast("Failed to send", "error"); }
+    finally { isSendingRef.current = false; } // FIX: unlock
     inputRef.current?.focus();
   };
 
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
-  };
-
-  // ===== Emoji =====
+  const handleKeyDown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } };
   const handleEmojiClick = (emoji) => { setText((p) => p + emoji); inputRef.current?.focus(); };
 
-  // ===== Voice recording =====
+  // ===== Voice recording (FIX: use ref for duration) =====
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      // Try mp4 first (Safari), fall back to webm
+      const mimeType = MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : 
+                        MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
+      const recorder = new MediaRecorder(stream, { mimeType });
       audioChunksRef.current = [];
-      recorder.ondataavailable = (e) => audioChunksRef.current.push(e.data);
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+
       recorder.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        const blob = new Blob(audioChunksRef.current, { type: mimeType });
         const reader = new FileReader();
         reader.onloadend = async () => {
           const base64 = reader.result;
+          const duration = recordingTimeRef.current; // FIX: use ref, not state
+          isSendingRef.current = true;
           try {
             const res = await axios.post(`${API_URL}/api/chat/message`, {
               password: folder.password, sender: username,
-              type: "voice", audioData: base64, audioDuration: recordingTime
+              type: "voice", audioData: base64, audioDuration: duration
             });
             if (res.data?.folder) setMessages(res.data.folder.messages);
             if (soundEnabled) playSound("send");
-          } catch (err) { addToast("Failed to send voice message", "error"); }
+          } catch (err) { addToast("Failed to send voice", "error"); }
+          finally { isSendingRef.current = false; }
         };
         reader.readAsDataURL(blob);
         setRecordingTime(0);
+        recordingTimeRef.current = 0;
       };
-      recorder.start();
+
+      recorder.start(100); // collect data every 100ms for reliability
       mediaRecorderRef.current = recorder;
       setIsRecording(true);
-      let t = 0;
-      recordingTimerRef.current = setInterval(() => { t++; setRecordingTime(t); if (t >= 30) stopRecording(); }, 1000);
+      recordingTimeRef.current = 0;
+      setRecordingTime(0);
+
+      recordingTimerRef.current = setInterval(() => {
+        recordingTimeRef.current += 1;
+        setRecordingTime(recordingTimeRef.current);
+        if (recordingTimeRef.current >= 30) stopRecording();
+      }, 1000);
     } catch (err) { addToast("Microphone access denied", "error"); }
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-      mediaRecorderRef.current.stop();
-    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") mediaRecorderRef.current.stop();
     clearInterval(recordingTimerRef.current);
     setIsRecording(false);
   };
 
-  // ===== Audio playback =====
+  // ===== Audio playback (FIX: better error handling) =====
   const playAudio = (audioData, msgId) => {
-    if (audioPlayerRef.current) { audioPlayerRef.current.pause(); }
-    const audio = new Audio(audioData);
-    audioPlayerRef.current = audio;
-    setPlayingAudioId(msgId);
-    audio.onended = () => setPlayingAudioId(null);
-    audio.play();
+    if (audioPlayerRef.current) { audioPlayerRef.current.pause(); audioPlayerRef.current = null; }
+    if (playingAudioId === msgId) { setPlayingAudioId(null); return; } // toggle pause
+    try {
+      const audio = new Audio(audioData);
+      audioPlayerRef.current = audio;
+      setPlayingAudioId(msgId);
+      audio.onended = () => { setPlayingAudioId(null); audioPlayerRef.current = null; };
+      audio.onerror = () => { setPlayingAudioId(null); audioPlayerRef.current = null; addToast("Cannot play audio", "error"); };
+      audio.play().catch(() => { setPlayingAudioId(null); addToast("Cannot play audio", "error"); });
+    } catch (e) { addToast("Cannot play audio", "error"); }
   };
 
-  // ===== Scroll =====
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    setShowScrollBtn(false); setNewMsgCount(0); setIsAtBottom(true);
-  };
+  const scrollToBottom = () => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); setShowScrollBtn(false); setNewMsgCount(0); setIsAtBottom(true); };
 
-  // ===== Copy =====
   const handleCopyMessage = (msgText) => {
-    navigator.clipboard.writeText(msgText).then(() => {
-      setCopyToast(Date.now());
-      setTimeout(() => setCopyToast(null), 1500);
-    });
+    navigator.clipboard.writeText(msgText).then(() => { setCopyToast(Date.now()); setTimeout(() => setCopyToast(null), 1500); });
   };
 
   // ===== Reactions =====
   const handleReaction = async (msgId, emoji = "❤️") => {
     setShowReactionPicker(null);
-    try {
-      const res = await axios.post(`${API_URL}/api/chat/react`, { password: folder.password, username, messageId: msgId, emoji });
-      if (res.data?.folder) setMessages(res.data.folder.messages);
-    } catch (e) {}
+    try { const res = await axios.post(`${API_URL}/api/chat/react`, { password: folder.password, username, messageId: msgId, emoji }); if (res.data?.folder) setMessages(res.data.folder.messages); } catch (e) {}
   };
 
   // ===== Delete =====
   const handleDelete = async (msgId) => {
-    try {
-      const res = await axios.post(`${API_URL}/api/chat/delete`, { password: folder.password, username, messageId: msgId });
-      if (res.data?.folder) setMessages(res.data.folder.messages);
-      addToast("Message deleted", "info");
-    } catch (e) { addToast("Failed to delete", "error"); }
+    try { const res = await axios.post(`${API_URL}/api/chat/delete`, { password: folder.password, username, messageId: msgId }); if (res.data?.folder) setMessages(res.data.folder.messages); addToast("Deleted", "info"); } catch (e) { addToast("Failed", "error"); }
   };
 
   // ===== Edit =====
@@ -350,59 +328,76 @@ export default function ChatRoom({ folder, onBack, addToast }) {
   const cancelEditing = () => { setEditingMsgId(null); setEditText(""); };
   const saveEdit = async () => {
     if (!editText.trim()) return;
-    try {
-      const res = await axios.post(`${API_URL}/api/chat/edit`, { password: folder.password, username, messageId: editingMsgId, newText: editText });
-      if (res.data?.folder) setMessages(res.data.folder.messages);
-      addToast("Message edited", "info");
-    } catch (e) { addToast("Failed to edit", "error"); }
+    try { const res = await axios.post(`${API_URL}/api/chat/edit`, { password: folder.password, username, messageId: editingMsgId, newText: editText }); if (res.data?.folder) setMessages(res.data.folder.messages); } catch (e) { addToast("Failed", "error"); }
     cancelEditing();
   };
 
   // ===== Pin =====
   const handlePin = async (msgId) => {
-    try {
-      const res = await axios.post(`${API_URL}/api/chat/pin`, { password: folder.password, messageId: msgId });
-      if (res.data?.folder) setMessages(res.data.folder.messages);
-    } catch (e) { addToast(e.response?.data?.message || "Failed to pin", "error"); }
+    try { const res = await axios.post(`${API_URL}/api/chat/pin`, { password: folder.password, messageId: msgId }); if (res.data?.folder) setMessages(res.data.folder.messages); } catch (e) { addToast(e.response?.data?.message || "Failed", "error"); }
   };
 
-  // ===== Sound toggle =====
-  const toggleSound = () => {
-    const next = !soundEnabled;
-    setSoundEnabled(next);
-    localStorage.setItem("chatvault_sound", next ? "on" : "off");
+  const toggleSound = () => { const n = !soundEnabled; setSoundEnabled(n); localStorage.setItem("chatvault_sound", n ? "on" : "off"); };
+
+  // ===== Touch handlers: Swipe-to-reply + long-press-to-react =====
+  const handleTouchStart = (e, msg) => {
+    if (msg.deletedAt) return;
+    const touch = e.touches[0];
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY, time: Date.now(), msgId: msg._id };
+    swipeStateRef.current = { msgId: null, x: 0 };
+
+    // Start long-press timer for reactions (500ms)
+    longPressTimerRef.current = setTimeout(() => {
+      setShowReactionPicker(msg._id);
+      touchStartRef.current.msgId = null; // cancel swipe
+    }, 500);
   };
 
-  // ===== Swipe =====
-  const handleTouchStart = (e, msg) => { touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, msgId: msg._id }; };
   const handleTouchMove = (e, msg) => {
-    if (touchStartRef.current.msgId !== msg._id) return;
-    const dx = e.touches[0].clientX - touchStartRef.current.x;
-    const dy = Math.abs(e.touches[0].clientY - touchStartRef.current.y);
-    if (dy > 30) { setSwipingMsgId(null); setSwipeX(0); return; }
-    if (dx > 10) { setSwipingMsgId(msg._id); setSwipeX(Math.min(dx, 80)); }
+    const start = touchStartRef.current;
+    if (!start.msgId || start.msgId !== msg._id) return;
+
+    const dx = e.touches[0].clientX - start.x;
+    const dy = Math.abs(e.touches[0].clientY - start.y);
+
+    // Cancel long-press on any movement
+    clearTimeout(longPressTimerRef.current);
+
+    // Ignore vertical scrolls
+    if (dy > 20) { swipeStateRef.current = { msgId: null, x: 0 }; return; }
+
+    // Right swipe only
+    if (dx > 5) {
+      e.preventDefault(); // prevent scroll
+      swipeStateRef.current = { msgId: msg._id, x: Math.min(dx, 80) };
+      // Force re-render for swipe visual
+      const row = e.currentTarget;
+      row.style.transform = `translateX(${Math.min(dx, 80)}px)`;
+      row.style.transition = "none";
+    }
   };
-  const handleTouchEnd = (msg) => {
-    if (swipeX > 50) { setReplyTo(msg); inputRef.current?.focus(); }
-    setSwipingMsgId(null); setSwipeX(0); touchStartRef.current = { x: 0, y: 0, msgId: null };
+
+  const handleTouchEnd = (e, msg) => {
+    clearTimeout(longPressTimerRef.current);
+    const row = e.currentTarget;
+    row.style.transform = "";
+    row.style.transition = "transform 0.2s ease";
+
+    if (swipeStateRef.current.x > 40) {
+      // Trigger reply
+      setReplyTo(msg);
+      inputRef.current?.focus();
+    }
+    swipeStateRef.current = { msgId: null, x: 0 };
   };
 
   // ===== Helpers =====
   const getReadCount = (msg) => msg.readBy ? msg.readBy.filter((r) => r.username !== msg.sender).length : 0;
   const getReactions = (msg) => {
-    if (!msg.reactions || msg.reactions.length === 0) return null;
-    const g = {};
-    msg.reactions.forEach((r) => { g[r.emoji] = (g[r.emoji] || 0) + 1; });
-    return g;
+    if (!msg.reactions || !msg.reactions.length) return null;
+    const g = {}; msg.reactions.forEach((r) => { g[r.emoji] = (g[r.emoji] || 0) + 1; }); return g;
   };
-
-  // ===== Date separator logic =====
-  const shouldShowDate = (msgs, idx) => {
-    if (idx === 0) return true;
-    const curr = new Date(msgs[idx].timestamp).toDateString();
-    const prev = new Date(msgs[idx - 1].timestamp).toDateString();
-    return curr !== prev;
-  };
+  const shouldShowDate = (msgs, idx) => idx === 0 || new Date(msgs[idx].timestamp).toDateString() !== new Date(msgs[idx - 1].timestamp).toDateString();
 
   // ===== USERNAME MODAL =====
   if (showUsernameModal) {
@@ -416,9 +411,7 @@ export default function ChatRoom({ folder, onBack, addToast }) {
             <input type="text" className="styled-input" placeholder="Enter your name..." value={usernameInput}
               onChange={(e) => setUsernameInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSaveUsername()} autoFocus id="username-input" />
           </div>
-          <button className="btn btn-primary" onClick={handleSaveUsername} disabled={!usernameInput.trim()} id="save-username-btn">
-            Let's Chat ✨
-          </button>
+          <button className="btn btn-primary" onClick={handleSaveUsername} disabled={!usernameInput.trim()} id="save-username-btn">Let's Chat ✨</button>
         </div>
       </div>
     );
@@ -429,7 +422,7 @@ export default function ChatRoom({ folder, onBack, addToast }) {
     <div className="chat-container">
       {copyToast && <div className="copy-toast" key={copyToast}>Copied ✓</div>}
 
-      {/* ===== Header ===== */}
+      {/* Header */}
       <div className="chat-header">
         <button className="chat-back-btn" onClick={onBack} id="back-btn">←</button>
         <div className="chat-header-info">
@@ -441,12 +434,10 @@ export default function ChatRoom({ folder, onBack, addToast }) {
             </span>
           </div>
         </div>
-        <button className="header-icon-btn" onClick={toggleSound} title={soundEnabled ? "Mute" : "Unmute"}>
-          {soundEnabled ? "🔊" : "🔇"}
-        </button>
+        <button className="header-icon-btn" onClick={toggleSound} title={soundEnabled ? "Mute" : "Unmute"}>{soundEnabled ? "🔊" : "🔇"}</button>
       </div>
 
-      {/* ===== Online users dropdown ===== */}
+      {/* Online dropdown */}
       {showOnlineList && (
         <div className="online-dropdown">
           <div className="online-dropdown-title">Online Members</div>
@@ -461,10 +452,10 @@ export default function ChatRoom({ folder, onBack, addToast }) {
         </div>
       )}
 
-      {/* ===== Pinned messages banner ===== */}
+      {/* Pinned banner */}
       {pinnedMessages.length > 0 && (
         <div className="pinned-banner" onClick={() => setShowPinned(!showPinned)}>
-          <span>📌 {pinnedMessages.length} pinned message{pinnedMessages.length > 1 ? "s" : ""}</span>
+          <span>📌 {pinnedMessages.length} pinned</span>
           <span className="pinned-toggle">{showPinned ? "▲" : "▼"}</span>
         </div>
       )}
@@ -480,7 +471,7 @@ export default function ChatRoom({ folder, onBack, addToast }) {
         </div>
       )}
 
-      {/* ===== Messages ===== */}
+      {/* Messages */}
       <div className="chat-messages" ref={messagesContainerRef} onScroll={handleScroll}>
         {messages.length === 0 ? (
           <div className="chat-messages-empty">
@@ -493,43 +484,30 @@ export default function ChatRoom({ folder, onBack, addToast }) {
             const isSent = msg.sender === username;
             const readCount = getReadCount(msg);
             const reactions = getReactions(msg);
-            const isBeingSwiped = swipingMsgId === msg._id;
             const isDeleted = !!msg.deletedAt;
             const isEditing = editingMsgId === msg._id;
 
             return (
               <React.Fragment key={msg._id || i}>
-                {/* Date separator */}
                 {shouldShowDate(messages, i) && (
-                  <div className="date-separator">
-                    <span>{getDateLabel(msg.timestamp)}</span>
-                  </div>
+                  <div className="date-separator"><span>{getDateLabel(msg.timestamp)}</span></div>
                 )}
 
                 <div
                   className={`message-row ${isSent ? "sent" : "received"}`}
                   onTouchStart={(e) => handleTouchStart(e, msg)}
                   onTouchMove={(e) => handleTouchMove(e, msg)}
-                  onTouchEnd={() => handleTouchEnd(msg)}
-                  style={isBeingSwiped ? { transform: `translateX(${swipeX}px)`, transition: "none" } : { transition: "transform 0.2s ease" }}
+                  onTouchEnd={(e) => handleTouchEnd(e, msg)}
                 >
-                  {isBeingSwiped && <div className="swipe-reply-icon" style={{ opacity: swipeX / 80 }}>↩</div>}
-
-                  {/* Avatar for received */}
-                  {!isSent && (
-                    <div className="avatar-sm" style={{ background: getAvatarColor(msg.sender) }}>
-                      {getInitials(msg.sender)}
-                    </div>
-                  )}
+                  {/* Avatar */}
+                  {!isSent && <div className="avatar-sm" style={{ background: getAvatarColor(msg.sender) }}>{getInitials(msg.sender)}</div>}
 
                   <div className="message-bubble-wrap">
                     <div className="message-bubble" onClick={() => !isDeleted && !isEditing && handleCopyMessage(msg.text)}>
-                      {/* Deleted message */}
                       {isDeleted ? (
                         <div className="message-deleted">🚫 This message was deleted</div>
                       ) : (
                         <>
-                          {/* Reply quote */}
                           {msg.replyTo && (
                             <div className="quoted-reply">
                               <span className="quoted-sender">{msg.replyTo.sender}</span>
@@ -538,7 +516,6 @@ export default function ChatRoom({ folder, onBack, addToast }) {
                           )}
                           {!isSent && <div className="message-sender">{msg.sender}</div>}
 
-                          {/* Voice message */}
                           {msg.type === "voice" ? (
                             <div className="voice-message">
                               <button className="voice-play-btn" onClick={(e) => { e.stopPropagation(); playAudio(msg.audioData, msg._id); }}>
@@ -551,6 +528,14 @@ export default function ChatRoom({ folder, onBack, addToast }) {
                                 ))}
                               </div>
                               <span className="voice-duration">{msg.audioDuration || 0}s</span>
+                              <span className="message-meta-inline">
+                                <span className="meta-time">{timeAgo(msg.timestamp)}</span>
+                                {isSent && (
+                                  <span className="meta-ticks">
+                                    {readCount > 0 ? (<><span className="tick-read">✓✓</span>{readCount > 1 && <sup className="tick-count">{readCount}</sup>}</>) : <span className="tick-sent">✓</span>}
+                                  </span>
+                                )}
+                              </span>
                             </div>
                           ) : isEditing ? (
                             <div className="edit-inline">
@@ -569,9 +554,7 @@ export default function ChatRoom({ folder, onBack, addToast }) {
                                 <span className="meta-time">{timeAgo(msg.timestamp)}</span>
                                 {isSent && (
                                   <span className="meta-ticks">
-                                    {readCount > 0 ? (
-                                      <><span className="tick-read">✓✓</span>{readCount > 1 && <sup className="tick-count">{readCount}</sup>}</>
-                                    ) : <span className="tick-sent">✓</span>}
+                                    {readCount > 0 ? (<><span className="tick-read">✓✓</span>{readCount > 1 && <sup className="tick-count">{readCount}</sup>}</>) : <span className="tick-sent">✓</span>}
                                   </span>
                                 )}
                               </span>
@@ -581,10 +564,9 @@ export default function ChatRoom({ folder, onBack, addToast }) {
                       )}
                     </div>
 
-                    {/* Pinned indicator */}
                     {msg.pinned && !isDeleted && <div className="pinned-indicator">📌</div>}
 
-                    {/* Reactions */}
+                    {/* Reactions - FIX: proper spacing */}
                     {reactions && (
                       <div className="reactions-row">
                         {Object.entries(reactions).map(([emoji, count]) => (
@@ -595,7 +577,7 @@ export default function ChatRoom({ folder, onBack, addToast }) {
                       </div>
                     )}
 
-                    {/* Hover actions */}
+                    {/* Desktop hover actions */}
                     {!isDeleted && !isEditing && (
                       <div className={`message-actions ${isSent ? "sent-actions" : ""}`}>
                         <button className="msg-action-btn" onClick={(e) => { e.stopPropagation(); setReplyTo(msg); inputRef.current?.focus(); }} title="Reply">↩</button>
@@ -606,7 +588,7 @@ export default function ChatRoom({ folder, onBack, addToast }) {
                       </div>
                     )}
 
-                    {/* Quick reaction picker */}
+                    {/* Reaction picker (works on both mobile long-press + desktop hover) */}
                     {showReactionPicker === msg._id && (
                       <div className="quick-reaction-picker">
                         {QUICK_REACTIONS.map((em) => (
@@ -623,7 +605,7 @@ export default function ChatRoom({ folder, onBack, addToast }) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Scroll to bottom */}
+      {/* Scroll */}
       {showScrollBtn && (
         <button className="scroll-to-bottom" onClick={scrollToBottom} id="scroll-bottom-btn">
           ↓{newMsgCount > 0 && <span className="scroll-badge">{newMsgCount}</span>}
@@ -649,7 +631,7 @@ export default function ChatRoom({ folder, onBack, addToast }) {
         </div>
       )}
 
-      {/* ===== Input Area ===== */}
+      {/* Input */}
       <div className="chat-input-area">
         <button className="emoji-btn" ref={emojiBtnRef} onClick={() => setShowEmojiPicker((p) => !p)} id="emoji-toggle-btn">😊</button>
 
@@ -667,7 +649,7 @@ export default function ChatRoom({ folder, onBack, addToast }) {
             {text.trim() ? (
               <button className="send-btn" onClick={handleSend} id="send-btn">➤</button>
             ) : (
-              <button className="mic-btn" onMouseDown={startRecording} onTouchStart={startRecording} id="mic-btn">🎤</button>
+              <button className="mic-btn" onClick={startRecording} id="mic-btn">🎤</button>
             )}
           </>
         )}
@@ -676,9 +658,7 @@ export default function ChatRoom({ folder, onBack, addToast }) {
           <div className="emoji-panel" ref={emojiPanelRef}>
             <div className="emoji-panel-header">Pick emojis</div>
             <div className="emoji-grid">
-              {EMOJI_LIST.map((emoji, i) => (
-                <button key={i} className="emoji-item" onClick={() => handleEmojiClick(emoji)}>{emoji}</button>
-              ))}
+              {EMOJI_LIST.map((emoji, i) => (<button key={i} className="emoji-item" onClick={() => handleEmojiClick(emoji)}>{emoji}</button>))}
             </div>
           </div>
         )}

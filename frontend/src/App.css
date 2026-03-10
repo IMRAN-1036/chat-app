@@ -682,7 +682,9 @@
 .reactions-row {
   display: flex;
   gap: 4px;
-  margin-top: 2px;
+  margin-top: 4px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
 }
 
 .message-row.sent .reactions-row {
@@ -1247,5 +1249,7 @@
   .toast { max-width: 100%; }
   .emoji-panel { width: calc(100vw - 2rem); left: 0; }
   .message-actions { display: none; }
-  .quick-reaction-picker { display: none; }
+  /* Reaction picker visible on mobile (triggered by long-press) */
+  .quick-reaction-picker { display: flex; }
+  .message-row { -webkit-user-select: none; user-select: none; }
 }
