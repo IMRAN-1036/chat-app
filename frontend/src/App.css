@@ -462,6 +462,7 @@
 .chat-messages {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 1rem 1.2rem;
   display: flex;
   flex-direction: column;
@@ -486,6 +487,8 @@
 .message-row {
   display: flex;
   position: relative;
+  align-items: flex-end;
+  touch-action: pan-y;
 }
 
 .message-row.sent { justify-content: flex-end; }
@@ -508,42 +511,101 @@
   overflow: visible;
 }
 
-/* ===== Action Toolbar (floats ABOVE bubble) ===== */
-.msg-toolbar {
+/* ===== Message Options Menu (3 dots) ===== */
+.msg-options-wrapper {
   position: absolute;
-  bottom: 100%;
-  margin-bottom: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  padding: 10px; /* Invisible padding to make hover area larger */
   display: flex;
-  gap: 1px;
-  padding: 3px 4px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-full);
-  box-shadow: var(--shadow-md);
-  z-index: 15;
-  animation: scaleIn 0.1s ease-out;
+  align-items: center;
 }
 
-.message-row.sent .msg-toolbar { right: 0; }
-.message-row.received .msg-toolbar { left: 0; }
+.message-row.sent .msg-options-wrapper {
+  right: 100%;
+  margin-right: -4px;
+}
 
-.msg-toolbar button {
-  width: 26px;
-  height: 26px;
-  border: none;
+.message-row.received .msg-options-wrapper {
+  left: 100%;
+  margin-left: -4px;
+}
+
+.msg-options-btn {
   background: transparent;
-  border-radius: 50%;
-  font-size: 0.75rem;
+  border: none;
+  color: rgba(255, 255, 255, 0.7); /* Bolder color */
+  font-size: 1.4rem;
+  padding: 4px 8px;
   cursor: pointer;
+  border-radius: var(--radius-full);
+  transition: var(--transition-fast);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: var(--transition-fast);
+  line-height: 1;
 }
 
-.msg-toolbar button:hover {
-  background: rgba(255, 255, 255, 0.1);
-  transform: scale(1.15);
+.msg-options-btn:hover,
+.msg-options-btn.active {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.msg-options-menu {
+  position: absolute;
+  top: 0;
+  width: 130px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(8px);
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  animation: scaleIn 0.15s ease-out;
+  z-index: 20;
+}
+
+.message-row.sent .msg-options-menu {
+  right: 100%;
+  margin-right: 8px;
+}
+
+.message-row.received .msg-options-menu {
+  left: 100%;
+  margin-left: 8px;
+}
+
+.msg-options-menu button {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 0.8rem;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: var(--transition-fast);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.msg-options-menu button:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
+.msg-options-menu button.danger-option {
+  color: #ef4444;
+}
+
+.msg-options-menu button.danger-option:hover {
+  background: rgba(239, 68, 68, 0.1);
 }
 
 /* ===== Message Bubble ===== */
@@ -1228,15 +1290,8 @@
 }
 .quick-reaction-item:hover { background: rgba(255,255,255,0.1); transform: scale(1.2); }
 
-/* ===== Updated message row for avatar ===== */
-.message-row {
-  align-items: flex-end;
-  touch-action: pan-y;
-  -webkit-user-select: none;
-  user-select: none;
-  cursor: grab;
-}
-.message-row:active { cursor: grabbing; }
+/* ===== Swipe visual hint ===== */
+.message-row[data-swipeable] { cursor: default; }
 
 /* ===== Responsive ===== */
 @media (max-width: 600px) {
@@ -1249,4 +1304,141 @@
   .emoji-panel { width: calc(100vw - 2rem); left: 0; }
   .msg-toolbar { display: none; }
   .quick-reaction-picker { display: flex; }
+  .attach-btn { display: none; }
+  .self-destruct-toggle { display: none; }
+}
+
+/* ===== Image Messages ===== */
+.image-message {
+  position: relative;
+}
+
+.chat-image {
+  max-width: 280px;
+  max-height: 300px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: var(--transition-fast);
+  object-fit: cover;
+  display: block;
+}
+
+.chat-image:hover {
+  opacity: 0.9;
+  transform: scale(1.02);
+}
+
+/* ===== File Messages ===== */
+.file-message {
+  min-width: 200px;
+}
+
+.file-info {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.3rem 0;
+}
+
+.file-icon {
+  font-size: 1.6rem;
+}
+
+.file-details {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.file-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.file-size {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.file-download {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: var(--text-primary);
+  font-size: 1.1rem;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.file-download:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* ===== Self-Destruct Badge ===== */
+.self-destruct-badge {
+  font-size: 0.68rem;
+  color: #f59e0b;
+  margin-top: 0.25rem;
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+
+/* ===== Burn Room Button ===== */
+.burn-btn {
+  transition: var(--transition-fast);
+}
+
+.burn-btn:hover {
+  background: rgba(239, 68, 68, 0.2) !important;
+  transform: scale(1.1);
+}
+
+/* ===== Attachment Buttons ===== */
+.attach-btn {
+  background: transparent;
+  border: none;
+  font-size: 1.1rem;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition-fast);
+  opacity: 0.6;
+}
+
+.attach-btn:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* ===== Self-Destruct Toggle ===== */
+.self-destruct-toggle {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 1rem;
+  padding: 4px 8px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: var(--transition-fast);
+  opacity: 0.5;
+}
+
+.self-destruct-toggle:hover {
+  opacity: 0.8;
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.self-destruct-toggle.active {
+  opacity: 1;
+  background: rgba(245, 158, 11, 0.15);
+  border-color: #f59e0b;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.3);
+  animation: pulse-glow 2s ease-in-out infinite;
 }

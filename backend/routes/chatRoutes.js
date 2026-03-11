@@ -1,17 +1,18 @@
 const express = require('express');
 const router = express.Router();
 const ChatFolder = require('../models/ChatFolder');
+const axios = require('axios');
 
 // Test route
 router.get('/', (req, res) => res.send('Backend running'));
 
 // Create a chat folder
 router.post('/create', async (req, res) => {
-  const { password } = req.body;
+  const { password, username } = req.body;
   try {
     const existing = await ChatFolder.findOne({ password });
     if (existing) return res.status(400).json({ message: 'Folder already exists' });
-    const newFolder = new ChatFolder({ password });
+    const newFolder = new ChatFolder({ password, createdBy: username || null });
     await newFolder.save();
     res.json({ message: 'Chat folder created' });
   } catch (err) {
@@ -31,9 +32,9 @@ router.post('/find', async (req, res) => {
   }
 });
 
-// Post a message (text or voice, with optional replyTo)
+// Post a message (text, voice, image, file — with optional replyTo and selfDestruct)
 router.post('/message', async (req, res) => {
-  const { password, sender, text, replyTo, type, audioData, audioDuration } = req.body;
+  const { password, sender, text, replyTo, type, audioData, audioDuration, selfDestruct, imageData, fileName, fileData, fileSize } = req.body;
   try {
     const folder = await ChatFolder.findOne({ password });
     if (!folder) return res.status(404).json({ message: 'Folder not found' });
@@ -44,13 +45,28 @@ router.post('/message', async (req, res) => {
       newMsg.audioDuration = audioDuration;
       newMsg.text = '🎤 Voice message';
     }
+    if (type === 'image') {
+      newMsg.imageData = imageData;
+      newMsg.text = newMsg.text || '🖼️ Image';
+    }
+    if (type === 'file') {
+      newMsg.fileName = fileName;
+      newMsg.fileData = fileData;
+      newMsg.fileSize = fileSize;
+      newMsg.text = newMsg.text || `📎 ${fileName}`;
+    }
     if (replyTo && replyTo.messageId) {
       newMsg.replyTo = { messageId: replyTo.messageId, sender: replyTo.sender, text: replyTo.text };
+    }
+    if (selfDestruct) {
+      newMsg.selfDestruct = true;
+      newMsg.expiresAt = new Date(Date.now() + 60 * 1000); // 60 seconds
     }
 
     folder.messages.push(newMsg);
     folder.typingUsers = folder.typingUsers.filter(t => t.username !== sender);
     await folder.save();
+    req.app.get('io')?.to(password).emit('folder_updated', folder);
     res.json({ message: 'Message added', folder });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -144,7 +160,10 @@ router.post('/read', async (req, res) => {
         }
       }
     }
-    if (updated) await folder.save();
+    if (updated) {
+      await folder.save();
+      req.app.get('io')?.to(password).emit('folder_updated', folder);
+    }
     res.json({ message: 'ok' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -164,6 +183,7 @@ router.post('/react', async (req, res) => {
     if (idx >= 0) msg.reactions.splice(idx, 1);
     else msg.reactions.push({ username, emoji: e });
     await folder.save();
+    req.app.get('io')?.to(password).emit('folder_updated', folder);
     res.json({ message: 'ok', folder });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -183,6 +203,7 @@ router.post('/delete', async (req, res) => {
     msg.text = '';
     msg.audioData = null;
     await folder.save();
+    req.app.get('io')?.to(password).emit('folder_updated', folder);
     res.json({ message: 'ok', folder });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -202,6 +223,7 @@ router.post('/edit', async (req, res) => {
     msg.text = newText;
     msg.editedAt = new Date();
     await folder.save();
+    req.app.get('io')?.to(password).emit('folder_updated', folder);
     res.json({ message: 'ok', folder });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -224,6 +246,7 @@ router.post('/pin', async (req, res) => {
     }
     msg.pinned = !msg.pinned;
     await folder.save();
+    req.app.get('io')?.to(password).emit('folder_updated', folder);
     res.json({ message: 'ok', folder });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -250,9 +273,51 @@ router.post('/forward', async (req, res) => {
       audioDuration: originalMsg.audioDuration
     });
     await toFolder.save();
+    req.app.get('io')?.to(toPassword).emit('folder_updated', toFolder);
     res.json({ message: 'ok', folder: toFolder });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Burn Room — wipe all messages (creator only)
+router.post('/burn', async (req, res) => {
+  const { password, username } = req.body;
+  try {
+    const folder = await ChatFolder.findOne({ password });
+    if (!folder) return res.status(404).json({ message: 'Folder not found' });
+    // Allow burn if createdBy matches or if createdBy is null (legacy rooms)
+    if (folder.createdBy && folder.createdBy !== username) {
+      return res.status(403).json({ message: 'Only the room creator can burn this room' });
+    }
+    folder.messages = [];
+    await folder.save();
+    req.app.get('io')?.to(password).emit('room_burned');
+    req.app.get('io')?.to(password).emit('folder_updated', folder);
+    res.json({ message: 'Room burned 🔥' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Link Preview Proxy
+router.get('/link-preview', async (req, res) => {
+  const { url } = req.query;
+  if (!url) return res.status(400).json({ message: 'URL required' });
+  try {
+    const response = await axios.get(url, { timeout: 5000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+    const html = response.data;
+    const getTag = (name, attr = 'content') => {
+      const r = new RegExp(`<meta[^>]*property=["']${name}["'][^>]*${attr}=["']([^"']*)["']`, 'i');
+      const r2 = new RegExp(`<meta[^>]*${attr}=["']([^"']*)["'][^>]*property=["']${name}["']`, 'i');
+      return (html.match(r) || html.match(r2) || [])[1] || '';
+    };
+    const title = getTag('og:title') || (html.match(/<title[^>]*>([^<]*)<\/title>/i) || [])[1] || '';
+    const description = getTag('og:description') || getTag('description', 'content') || '';
+    const image = getTag('og:image') || '';
+    res.json({ url, title, description, image });
+  } catch (err) {
+    res.status(500).json({ message: 'Could not fetch preview' });
   }
 });
 

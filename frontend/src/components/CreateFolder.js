@@ -36,11 +36,12 @@ export default function CreateFolder({ addToast }) {
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === "Enter") handleCreate();
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.key === "Enter" || e.keyCode === 13) handleCreate();
   };
 
   return (
-    <div className="glass-card">
+    <form className="glass-card" onSubmit={(e) => { e.preventDefault(); handleCreate(); }}>
       <div className="card-header">
         <div className="card-icon create">🛡️</div>
         <h2 className="card-title">Create a Room</h2>
@@ -52,19 +53,18 @@ export default function CreateFolder({ addToast }) {
           placeholder="Choose a secret password..."
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          onKeyDown={handleKeyDown}
           disabled={loading}
           id="create-room-input"
         />
       </div>
       <button
+        type="submit"
         className="btn btn-primary"
-        onClick={handleCreate}
         disabled={loading}
         id="create-room-btn"
       >
         {loading ? <div className="spinner"></div> : "🚀 Create Room"}
       </button>
-    </div>
+    </form>
   );
 }

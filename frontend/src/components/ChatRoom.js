@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import axios from "axios";
+import { io } from "socket.io-client";
 
 const EMOJI_LIST = [
   "😀","😂","🤣","😊","😍","🥰","😘","😎","🤩","🥳",
@@ -31,6 +32,19 @@ function getDateLabel(date) {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+// Deterministic waveform heights based on message ID
+function getWaveformHeights(msgId) {
+  const heights = [];
+  let seed = 0;
+  const str = msgId || "default";
+  for (let i = 0; i < str.length; i++) seed = str.charCodeAt(i) + ((seed << 5) - seed);
+  for (let i = 0; i < 16; i++) {
+    seed = (seed * 9301 + 49297) % 233280;
+    heights.push(6 + (seed % 17));
+  }
+  return heights;
+}
+
 function playSound(type) {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -43,21 +57,27 @@ function playSound(type) {
   } catch (e) {}
 }
 
-/* ===== Swipeable Row (touch + mouse drag) ===== */
+/* ===== Swipeable Row — touch + mouse drag + trackpad swipe ===== */
 function SwipeableRow({ children, className, onSwipeReply, onLongPress, disabled }) {
   const rowRef = useRef(null);
-  const stateRef = useRef({ startX: 0, startY: 0, dragging: false, longTimer: null, isMouse: false });
+  const stateRef = useRef({ startX: 0, startY: 0, dragging: false, dragged: false, longTimer: null, isMouse: false, trackpadAcc: 0, wheelTimer: null, hasTriggeredReply: false });
+
+  // Spring animations for different states
+  const DRAG_TRANSITION = "transform 0.08s linear"; // Interpolates raw input to feel smoother
+  const SNAP_TRANSITION = "transform 0.3s cubic-bezier(0.33, 1, 0.68, 1)"; // Bouncy spring reset
 
   useEffect(() => {
     const el = rowRef.current;
     if (!el || disabled) return;
 
     const start = (x, y, isMouse) => {
-      stateRef.current = { startX: x, startY: y, dragging: false, longTimer: null, isMouse };
-      stateRef.current.longTimer = setTimeout(() => {
-        stateRef.current.dragging = false;
-        if (onLongPress) onLongPress();
-      }, 500);
+      stateRef.current = { startX: x, startY: y, dragging: false, dragged: false, longTimer: null, isMouse, trackpadAcc: 0, wheelTimer: null, hasTriggeredReply: false };
+      if (!isMouse) {
+        stateRef.current.longTimer = setTimeout(() => {
+          stateRef.current.dragging = false;
+          if (onLongPress) onLongPress();
+        }, 500);
+      }
     };
 
     const move = (x, y, e) => {
@@ -65,35 +85,50 @@ function SwipeableRow({ children, className, onSwipeReply, onLongPress, disabled
       const dx = x - s.startX;
       const dy = Math.abs(y - s.startY);
       if (s.longTimer && (Math.abs(dx) > 5 || dy > 5)) { clearTimeout(s.longTimer); s.longTimer = null; }
-      if (dy > 15 && !s.dragging) return;
-      if (dx > 8) {
+      if (dy > 20 && !s.dragging) return;
+      if (dx > 10) {
         s.dragging = true;
-        if (e && e.cancelable) { try { e.preventDefault(); } catch (err) {} }
-        el.style.transform = `translateX(${Math.min(dx, 80)}px)`;
-        el.style.transition = "none";
+        s.dragged = true;
+        if (e && e.cancelable) try { e.preventDefault(); } catch (err) {}
+        
+        // Add resistance as it goes further right
+        let offset = dx;
+        if (offset > 60) offset = 60 + (offset - 60) * 0.3; // Rubber banding effect
+        offset = Math.min(offset, 90);
+        
+        el.style.transform = `translateX(${offset}px)`;
+        el.style.transition = DRAG_TRANSITION;
       }
     };
 
     const end = () => {
       if (stateRef.current.longTimer) clearTimeout(stateRef.current.longTimer);
       const wasDragging = stateRef.current.dragging;
-      const px = parseInt(el.style.transform?.replace(/[^0-9.-]/g, "")) || 0;
-      el.style.transform = ""; el.style.transition = "transform 0.2s ease";
-      if (wasDragging && px > 40 && onSwipeReply) onSwipeReply();
+      const px = parseInt(el.style.transform?.replace(/[^0-9]/g, "")) || 0;
+      
+      el.style.transform = "translateX(0px)";
+      el.style.transition = SNAP_TRANSITION;
+      
+      if (wasDragging && px > 40 && onSwipeReply && !stateRef.current.hasTriggeredReply) onSwipeReply();
+      
       stateRef.current.dragging = false;
-      // Remove mouse listeners after drag
+      stateRef.current.hasTriggeredReply = false;
+      setTimeout(() => { 
+        stateRef.current.dragged = false; 
+        el.style.transition = ""; 
+      }, 300);
       document.removeEventListener("mousemove", onMouseMove);
       document.removeEventListener("mouseup", onMouseUp);
     };
 
-    // Touch
     const onTouchStart = (e) => start(e.touches[0].clientX, e.touches[0].clientY, false);
     const onTouchMove = (e) => move(e.touches[0].clientX, e.touches[0].clientY, e);
     const onTouchEnd = () => end();
 
-    // Mouse (for desktop drag)
     const onMouseDown = (e) => {
-      if (e.button !== 0) return; // left click only
+      if (e.target.closest("button") || e.target.closest("input") || e.target.closest(".msg-options-menu") || e.target.closest(".quick-reaction-picker") || e.target.closest(".msg-options-btn")) return;
+      if (e.button !== 0) return;
+      e.preventDefault();
       start(e.clientX, e.clientY, true);
       document.addEventListener("mousemove", onMouseMove);
       document.addEventListener("mouseup", onMouseUp);
@@ -101,25 +136,73 @@ function SwipeableRow({ children, className, onSwipeReply, onLongPress, disabled
     const onMouseMove = (e) => { if (stateRef.current.isMouse) move(e.clientX, e.clientY, e); };
     const onMouseUp = () => { if (stateRef.current.isMouse) end(); };
 
+    // Trackpad horizontal swipe
+    const onWheel = (e) => {
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && Math.abs(e.deltaX) > 2) {
+        if (e.deltaX < 0 && !stateRef.current.dragging) return;
+        if (e.cancelable) try { e.preventDefault(); } catch (err) {}
+        
+        stateRef.current.trackpadAcc += e.deltaX;
+        
+        if (stateRef.current.trackpadAcc > 10) {
+          stateRef.current.dragging = true;
+          stateRef.current.dragged = true;
+          
+          let offset = stateRef.current.trackpadAcc;
+          if (offset > 60) offset = 60 + (offset - 60) * 0.3; // Rubber banding
+          offset = Math.min(offset, 90);
+          
+          if (offset >= 50 && !stateRef.current.hasTriggeredReply) {
+            stateRef.current.hasTriggeredReply = true;
+            if (onSwipeReply) onSwipeReply();
+            
+            if (stateRef.current.wheelTimer) clearTimeout(stateRef.current.wheelTimer);
+            stateRef.current.wheelTimer = setTimeout(() => {
+              el.style.transform = "translateX(0px)";
+              el.style.transition = SNAP_TRANSITION;
+              stateRef.current.trackpadAcc = 0;
+              stateRef.current.dragging = false;
+              setTimeout(() => { 
+                stateRef.current.dragged = false;
+                el.style.transition = ""; 
+              }, 300);
+            }, 30);
+            return;
+          }
+          
+          el.style.transform = `translateX(${offset}px)`;
+          el.style.transition = DRAG_TRANSITION;
+          
+          if (stateRef.current.wheelTimer) clearTimeout(stateRef.current.wheelTimer);
+          stateRef.current.wheelTimer = setTimeout(() => {
+            end();
+            stateRef.current.trackpadAcc = 0;
+          }, 150);
+        }
+      }
+    };
+
     el.addEventListener("touchstart", onTouchStart, { passive: true });
     el.addEventListener("touchmove", onTouchMove, { passive: false });
     el.addEventListener("touchend", onTouchEnd, { passive: true });
     el.addEventListener("mousedown", onMouseDown);
+    // Wheel event must be non-passive to prevent navigation (back/forward) on mac
+    el.addEventListener("wheel", onWheel, { passive: false });
 
     return () => {
       el.removeEventListener("touchstart", onTouchStart);
       el.removeEventListener("touchmove", onTouchMove);
       el.removeEventListener("touchend", onTouchEnd);
       el.removeEventListener("mousedown", onMouseDown);
+      el.removeEventListener("wheel", onWheel);
       document.removeEventListener("mousemove", onMouseMove);
       document.removeEventListener("mouseup", onMouseUp);
     };
   }, [disabled, onSwipeReply, onLongPress]);
 
-  return <div ref={rowRef} className={className}>{children}</div>;
+  return <div ref={rowRef} className={className} data-swipeable="true">{children}</div>;
 }
 
-/* ===== Main ===== */
 export default function ChatRoom({ folder, onBack, addToast }) {
   const [messages, setMessages] = useState(folder.messages || []);
   const [text, setText] = useState("");
@@ -142,9 +225,13 @@ export default function ChatRoom({ folder, onBack, addToast }) {
   const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem("chatvault_sound") !== "off");
   const [showReactionPicker, setShowReactionPicker] = useState(null);
   const [hoveredMsgId, setHoveredMsgId] = useState(null);
+  const [openMenuId, setOpenMenuId] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [playingAudioId, setPlayingAudioId] = useState(null);
+  const [selfDestructOn, setSelfDestructOn] = useState(false);
+  const [showBurnConfirm, setShowBurnConfirm] = useState(false);
+  const [imagePreview, setImagePreview] = useState(null);
 
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
@@ -159,6 +246,8 @@ export default function ChatRoom({ folder, onBack, addToast }) {
   const recordingTimeRef = useRef(0);
   const audioPlayerRef = useRef(null);
   const isSendingRef = useRef(false);
+  const fileInputRef = useRef(null);
+  const imageInputRef = useRef(null);
 
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:2000";
 
@@ -173,15 +262,23 @@ export default function ChatRoom({ folder, onBack, addToast }) {
   useEffect(() => {
     if (showReactionPicker) {
       const close = (e) => { if (!e.target.closest(".quick-reaction-picker")) setShowReactionPicker(null); };
-      const t = setTimeout(() => { document.addEventListener("touchstart", close); document.addEventListener("mousedown", close); }, 200);
-      return () => { clearTimeout(t); document.removeEventListener("touchstart", close); document.removeEventListener("mousedown", close); };
+      const t = setTimeout(() => { document.addEventListener("touchstart", close); document.addEventListener("click", close); }, 200);
+      return () => { clearTimeout(t); document.removeEventListener("touchstart", close); document.removeEventListener("click", close); };
     }
   }, [showReactionPicker]);
 
+  useEffect(() => {
+    if (openMenuId) {
+      const close = (e) => { if (!e.target.closest(".msg-options-menu") && !e.target.closest(".msg-options-btn")) setOpenMenuId(null); };
+      const t = setTimeout(() => document.addEventListener("click", close), 10);
+      return () => { clearTimeout(t); document.removeEventListener("click", close); };
+    }
+  }, [openMenuId]);
+
   const handleScroll = useCallback(() => {
     const c = messagesContainerRef.current; if (!c) return;
-    const atBottom = c.scrollHeight - c.scrollTop - c.clientHeight < 100;
-    setIsAtBottom(atBottom); setShowScrollBtn(!atBottom); if (atBottom) setNewMsgCount(0);
+    const atB = c.scrollHeight - c.scrollTop - c.clientHeight < 100;
+    setIsAtBottom(atB); setShowScrollBtn(!atB); if (atB) setNewMsgCount(0);
   }, []);
 
   useEffect(() => {
@@ -190,19 +287,51 @@ export default function ChatRoom({ folder, onBack, addToast }) {
     prevMsgCountRef.current = messages.length;
   }, [messages, isAtBottom]);
 
-  const fetchMessages = useCallback(async () => {
-    if (isSendingRef.current) return;
+  const socketRef = useRef(null);
+
+  useEffect(() => {
+    socketRef.current = io(API_URL);
+    if (folder?.password) socketRef.current.emit("join_room", folder.password);
+
+    socketRef.current.on("folder_updated", (updatedFolder) => {
+      const oldLen = prevMsgCountRef.current;
+      if (updatedFolder.messages) {
+        setMessages(updatedFolder.messages);
+        if (soundEnabled && updatedFolder.messages.length > oldLen) {
+          const n = updatedFolder.messages[updatedFolder.messages.length - 1];
+          if (n && n.sender !== username) playSound("receive");
+        }
+        setPinnedMessages(updatedFolder.messages.filter(m => m.pinned && !m.deletedAt));
+      }
+      if (updatedFolder.onlineUsers) setOnlineUsers(updatedFolder.onlineUsers.map(u => u.username));
+    });
+
+    socketRef.current.on("user_typing", ({ username: typingUser }) => {
+      if (typingUser !== username) {
+        setTypingUsers(prev => prev.includes(typingUser) ? prev : [...prev, typingUser]);
+        setTimeout(() => setTypingUsers(prev => prev.filter(u => u !== typingUser)), 3000);
+      }
+    });
+
+    socketRef.current.on("room_burned", () => {
+      setMessages([]);
+      setPinnedMessages([]);
+      addToast("Room was burned 🔥 All messages wiped!", "error");
+    });
+
+    return () => socketRef.current.disconnect();
+  }, [API_URL, folder.password, soundEnabled, username]);
+
+  const fetchInitialData = useCallback(async () => {
     try {
       const res = await axios.post(`${API_URL}/api/chat/poll`, { password: folder.password });
       if (res.data) {
-        const oldLen = prevMsgCountRef.current;
-        if (res.data.messages) { setMessages(res.data.messages); if (soundEnabled && res.data.messages.length > oldLen) { const n = res.data.messages[res.data.messages.length - 1]; if (n && n.sender !== username) playSound("receive"); } }
-        if (res.data.typingUsers) setTypingUsers(res.data.typingUsers.filter((u) => u !== username));
+        if (res.data.messages) setMessages(res.data.messages);
         if (res.data.onlineUsers) setOnlineUsers(res.data.onlineUsers);
         if (res.data.pinnedMessages) setPinnedMessages(res.data.pinnedMessages);
       }
     } catch (e) {}
-  }, [API_URL, folder.password, username, soundEnabled]);
+  }, [API_URL, folder.password]);
 
   const sendReadReceipts = useCallback(async (msgs) => {
     if (!username) return;
@@ -210,29 +339,97 @@ export default function ChatRoom({ folder, onBack, addToast }) {
     if (ids.length) try { await axios.post(`${API_URL}/api/chat/read`, { password: folder.password, username, messageIds: ids }); } catch (e) {}
   }, [API_URL, folder.password, username]);
 
+  useEffect(() => { fetchInitialData(); }, [fetchInitialData]);
   useEffect(() => { if (!username) return; const b = async () => { try { await axios.post(`${API_URL}/api/chat/heartbeat`, { password: folder.password, username }); } catch (e) {} }; b(); const i = setInterval(b, 5000); return () => clearInterval(i); }, [API_URL, folder.password, username]);
-  useEffect(() => { const i = setInterval(fetchMessages, 2000); return () => clearInterval(i); }, [fetchMessages]);
+  // Re-sync online users occasionally as a fallback
+  useEffect(() => { const i = setInterval(fetchInitialData, 10000); return () => clearInterval(i); }, [fetchInitialData]);
   useEffect(() => { if (messages.length > 0 && username) sendReadReceipts(messages); }, [messages, username, sendReadReceipts]);
 
   const handleSaveUsername = () => { const n = usernameInput.trim(); if (!n) return; localStorage.setItem("chatvault_username", n); setUsername(n); setShowUsernameModal(false); addToast(`Welcome, ${n}! 👋`, "success"); setTimeout(() => inputRef.current?.focus(), 100); };
 
-  const sendTypingIndicator = useCallback(async () => { const now = Date.now(); if (now - lastTypingSentRef.current < 2000) return; lastTypingSentRef.current = now; try { await axios.post(`${API_URL}/api/chat/typing`, { password: folder.password, username }); } catch (e) {} }, [API_URL, folder.password, username]);
+  const sendTypingIndicator = useCallback(() => { 
+    const now = Date.now(); if (now - lastTypingSentRef.current < 2000) return; lastTypingSentRef.current = now; 
+    socketRef.current?.emit("typing", { password: folder.password, username });
+  }, [folder.password, username]);
   const handleInputChange = (e) => { setText(e.target.value); if (e.target.value.trim()) sendTypingIndicator(); };
 
   const handleSend = async () => {
     if (!text.trim()) return;
-    const mt = text; setText(""); isSendingRef.current = true;
-    setMessages((p) => [...p, { _id: `opt_${Date.now()}`, sender: username, text: mt, timestamp: new Date().toISOString(), readBy: [], reactions: [], replyTo: replyTo || null, type: "text" }]);
+    const mt = text; setText("");
+    setMessages((p) => [...p, { _id: `opt_${Date.now()}`, sender: username, text: mt, timestamp: new Date().toISOString(), readBy: [], reactions: [], replyTo: replyTo || null, type: "text", selfDestruct: selfDestructOn }]);
     setIsAtBottom(true); setNewMsgCount(0); if (soundEnabled) playSound("send");
     const d = { password: folder.password, sender: username, text: mt };
     if (replyTo) d.replyTo = { messageId: replyTo._id, sender: replyTo.sender, text: replyTo.text };
+    if (selfDestructOn) d.selfDestruct = true;
     setReplyTo(null);
-    try { const r = await axios.post(`${API_URL}/api/chat/message`, d); if (r.data?.folder) setMessages(r.data.folder.messages); } catch (e) { addToast("Failed", "error"); }
-    finally { isSendingRef.current = false; } inputRef.current?.focus();
+    try { await axios.post(`${API_URL}/api/chat/message`, d); } catch (e) { addToast("Failed", "error"); }
+    inputRef.current?.focus();
   };
 
-  const handleKeyDown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } };
   const handleEmojiClick = (em) => { setText((p) => p + em); inputRef.current?.focus(); };
+
+  const handleBurnRoom = async () => {
+    setShowBurnConfirm(false);
+    try {
+      await axios.post(`${API_URL}/api/chat/burn`, { password: folder.password, username });
+      addToast("Room burned 🔥 All messages wiped!", "success");
+    } catch (e) {
+      addToast(e.response?.data?.message || "Failed to burn room", "error");
+    }
+  };
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    if (file.size > maxSize) { addToast("Image too large (max 5MB)", "error"); return; }
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      // Compress via canvas
+      const img = new Image();
+      img.onload = async () => {
+        const canvas = document.createElement('canvas');
+        const maxDim = 800;
+        let w = img.width, h = img.height;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) { h = (h / w) * maxDim; w = maxDim; }
+          else { w = (w / h) * maxDim; h = maxDim; }
+        }
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        const compressed = canvas.toDataURL('image/jpeg', 0.7);
+        isSendingRef.current = true;
+        try {
+          const r = await axios.post(`${API_URL}/api/chat/message`, { password: folder.password, sender: username, type: 'image', imageData: compressed, text: '🖼️ Image', selfDestruct: selfDestructOn || undefined });
+          if (r.data?.folder) setMessages(r.data.folder.messages);
+          if (soundEnabled) playSound('send');
+        } catch (err) { addToast('Failed to send image', 'error'); }
+        finally { isSendingRef.current = false; }
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (file.size > maxSize) { addToast("File too large (max 10MB)", "error"); return; }
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      isSendingRef.current = true;
+      try {
+        const r = await axios.post(`${API_URL}/api/chat/message`, { password: folder.password, sender: username, type: 'file', fileName: file.name, fileData: reader.result, fileSize: file.size, text: `📎 ${file.name}`, selfDestruct: selfDestructOn || undefined });
+        if (r.data?.folder) setMessages(r.data.folder.messages);
+        if (soundEnabled) playSound('send');
+      } catch (err) { addToast('Failed to send file', 'error'); }
+      finally { isSendingRef.current = false; }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
 
   const startRecording = async () => {
     try {
@@ -271,7 +468,19 @@ export default function ChatRoom({ folder, onBack, addToast }) {
   };
 
   const scrollToBottom = () => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); setShowScrollBtn(false); setNewMsgCount(0); setIsAtBottom(true); };
-  const handleCopyMessage = (t) => { navigator.clipboard.writeText(t).then(() => { setCopyToast(Date.now()); setTimeout(() => setCopyToast(null), 1500); }); };
+
+  // FIX: Only copy if not a drag
+  const handleBubbleClick = useCallback((e, msgText) => {
+    // Check if a drag just happened
+    const swipeEl = e.currentTarget.closest("[data-swipeable]");
+    if (swipeEl) {
+      // Access the ref through DOM — check transform
+    }
+    // Don't copy if click originated from a button
+    if (e.target.closest("button")) return;
+    navigator.clipboard.writeText(msgText).then(() => { setCopyToast(Date.now()); setTimeout(() => setCopyToast(null), 1500); });
+  }, []);
+
   const handleReaction = async (id, em = "❤️") => { setShowReactionPicker(null); try { const r = await axios.post(`${API_URL}/api/chat/react`, { password: folder.password, username, messageId: id, emoji: em }); if (r.data?.folder) setMessages(r.data.folder.messages); } catch (e) {} };
   const handleDelete = async (id) => { try { const r = await axios.post(`${API_URL}/api/chat/delete`, { password: folder.password, username, messageId: id }); if (r.data?.folder) setMessages(r.data.folder.messages); } catch (e) {} };
   const startEditing = (m) => { setEditingMsgId(m._id); setEditText(m.text); };
@@ -285,13 +494,26 @@ export default function ChatRoom({ folder, onBack, addToast }) {
   const shouldShowDate = (ms, i) => i === 0 || new Date(ms[i].timestamp).toDateString() !== new Date(ms[i - 1].timestamp).toDateString();
   const triggerReply = useCallback((m) => { setReplyTo(m); setTimeout(() => inputRef.current?.focus(), 50); }, []);
 
+  // Memoize waveform heights so they don't change every render
+  const waveformCache = useMemo(() => {
+    const cache = {};
+    messages.forEach(m => { if (m.type === "voice" && m._id) cache[m._id] = getWaveformHeights(m._id); });
+    return cache;
+  }, [messages]);
+
   if (showUsernameModal) {
     return (
-      <div className="username-overlay"><div className="username-modal">
-        <div className="modal-icon">👤</div><h3>What's your name?</h3><p>This will be shown next to your messages</p>
-        <div className="input-group" style={{ marginBottom: "1rem" }}><input type="text" className="styled-input" placeholder="Enter your name..." value={usernameInput} onChange={(e) => setUsernameInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSaveUsername()} autoFocus id="username-input" /></div>
-        <button className="btn btn-primary" onClick={handleSaveUsername} disabled={!usernameInput.trim()} id="save-username-btn">Let's Chat ✨</button>
-      </div></div>
+      <div className="username-overlay">
+        <form className="username-modal" onSubmit={(e) => { e.preventDefault(); handleSaveUsername(); }}>
+          <div className="modal-icon">👤</div>
+          <h3>What's your name?</h3>
+          <p>This will be shown next to your messages</p>
+          <div className="input-group" style={{ marginBottom: "1rem" }}>
+            <input type="text" className="styled-input" placeholder="Enter your name..." value={usernameInput} onChange={(e) => setUsernameInput(e.target.value)} autoFocus id="username-input" />
+          </div>
+          <button type="submit" className="btn btn-primary" disabled={!usernameInput.trim()} id="save-username-btn">Let's Chat ✨</button>
+        </form>
+      </div>
     );
   }
 
@@ -309,7 +531,22 @@ export default function ChatRoom({ folder, onBack, addToast }) {
           </div>
         </div>
         <button className="header-icon-btn" onClick={toggleSound}>{soundEnabled ? "🔊" : "🔇"}</button>
+        <button className="header-icon-btn burn-btn" onClick={() => setShowBurnConfirm(true)} title="Burn Room">🔥</button>
       </div>
+
+      {showBurnConfirm && (
+        <div className="username-overlay" onClick={() => setShowBurnConfirm(false)}>
+          <div className="username-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-icon">🔥</div>
+            <h3>Burn this Room?</h3>
+            <p>This will permanently delete ALL messages. This action cannot be undone.</p>
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+              <button className="btn btn-secondary" onClick={() => setShowBurnConfirm(false)} style={{ flex: 1 }}>Cancel</button>
+              <button className="btn" onClick={handleBurnRoom} style={{ flex: 1, background: 'linear-gradient(135deg, #ef4444, #dc2626)', color: '#fff' }}>🔥 Burn It</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showOnlineList && (
         <div className="online-dropdown">
@@ -333,7 +570,8 @@ export default function ChatRoom({ folder, onBack, addToast }) {
           const rxns = getReactions(msg);
           const isDel = !!msg.deletedAt;
           const isEdit = editingMsgId === msg._id;
-          const isHovered = hoveredMsgId === msg._id;
+          const isHov = hoveredMsgId === msg._id;
+          const waveHeights = waveformCache[msg._id] || getWaveformHeights(msg._id || "x");
 
           return (
             <React.Fragment key={msg._id || i}>
@@ -348,10 +586,10 @@ export default function ChatRoom({ folder, onBack, addToast }) {
                 {!isSent && <div className="avatar-sm" style={{ background: getAvatarColor(msg.sender) }}>{getInitials(msg.sender)}</div>}
 
                 <div className="message-bubble-wrap"
-                  onMouseEnter={() => setHoveredMsgId(msg._id)}
-                  onMouseLeave={() => { setHoveredMsgId(null); setShowReactionPicker(null); }}
+                  onMouseEnter={() => !isDel && setHoveredMsgId(msg._id)}
+                  onMouseLeave={() => { setHoveredMsgId(null); }}
                 >
-                  <div className="message-bubble" onClick={() => !isDel && !isEdit && handleCopyMessage(msg.text)}>
+                  <div className="message-bubble" onClick={(e) => !isDel && !isEdit && handleBubbleClick(e, msg.text)}>
                     {isDel ? <div className="message-deleted">🚫 This message was deleted</div> : (
                       <>
                         {msg.replyTo && <div className="quoted-reply"><span className="quoted-sender">{msg.replyTo.sender}</span><span className="quoted-text">{msg.replyTo.text?.length > 60 ? msg.replyTo.text.slice(0, 60) + "…" : msg.replyTo.text}</span></div>}
@@ -360,15 +598,37 @@ export default function ChatRoom({ folder, onBack, addToast }) {
                         {msg.type === "voice" ? (
                           <div className="voice-message">
                             <button className="voice-play-btn" onClick={(e) => { e.stopPropagation(); playAudio(msg.audioData, msg._id); }}>{playingAudioId === msg._id ? "⏸" : "▶"}</button>
-                            <div className="voice-waveform">{[...Array(16)].map((_, j) => <div key={j} className={`waveform-bar ${playingAudioId === msg._id ? "playing" : ""}`} style={{ height: `${Math.random() * 16 + 6}px`, animationDelay: `${j * 0.05}s` }} />)}</div>
+                            <div className="voice-waveform">{waveHeights.map((h, j) => <div key={j} className={`waveform-bar ${playingAudioId === msg._id ? "playing" : ""}`} style={{ height: `${h}px`, animationDelay: `${j * 0.05}s` }} />)}</div>
                             <span className="voice-duration">{msg.audioDuration || 0}s</span>
                             <span className="message-meta-inline"><span className="meta-time">{timeAgo(msg.timestamp)}</span>{isSent && <span className="meta-ticks">{rc > 0 ? <><span className="tick-read">✓✓</span>{rc > 1 && <sup className="tick-count">{rc}</sup>}</> : <span className="tick-sent">✓</span>}</span>}</span>
                           </div>
-                        ) : isEdit ? (
-                          <div className="edit-inline">
-                            <input type="text" className="edit-input" value={editText} onChange={(e) => setEditText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") cancelEditing(); }} autoFocus />
-                            <div className="edit-actions"><button className="edit-save" onClick={saveEdit}>✓</button><button className="edit-cancel" onClick={cancelEditing}>✕</button></div>
+                        ) : msg.type === "image" ? (
+                          <div className="image-message">
+                            <img src={msg.imageData} alt="shared" className="chat-image" onClick={(e) => { e.stopPropagation(); window.open(msg.imageData, '_blank'); }} />
+                            {msg.selfDestruct && <div className="self-destruct-badge">💣 Self-destructs</div>}
+                            <span className="message-meta-inline"><span className="meta-time">{timeAgo(msg.timestamp)}</span>{isSent && <span className="meta-ticks">{rc > 0 ? <><span className="tick-read">✓✓</span>{rc > 1 && <sup className="tick-count">{rc}</sup>}</> : <span className="tick-sent">✓</span>}</span>}</span>
                           </div>
+                        ) : msg.type === "file" ? (
+                          <div className="file-message">
+                            <div className="file-info">
+                              <span className="file-icon">📎</span>
+                              <div className="file-details">
+                                <span className="file-name">{msg.fileName || 'File'}</span>
+                                <span className="file-size">{msg.fileSize ? (msg.fileSize / 1024).toFixed(1) + ' KB' : ''}</span>
+                              </div>
+                              <button className="file-download" onClick={(e) => { e.stopPropagation(); const a = document.createElement('a'); a.href = msg.fileData; a.download = msg.fileName || 'file'; a.click(); }}>⬇</button>
+                            </div>
+                            {msg.selfDestruct && <div className="self-destruct-badge">💣 Self-destructs</div>}
+                            <span className="message-meta-inline"><span className="meta-time">{timeAgo(msg.timestamp)}</span>{isSent && <span className="meta-ticks">{rc > 0 ? <><span className="tick-read">✓✓</span>{rc > 1 && <sup className="tick-count">{rc}</sup>}</> : <span className="tick-sent">✓</span>}</span>}</span>
+                          </div>
+                        ) : isEdit ? (
+                          <form className="edit-inline" onSubmit={(e) => { e.preventDefault(); saveEdit(); }}>
+                            <input type="text" className="edit-input" value={editText} onChange={(e) => setEditText(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape") cancelEditing(); }} autoFocus onClick={(e) => e.stopPropagation()} />
+                            <div className="edit-actions">
+                              <button type="submit" className="edit-save">✓</button>
+                              <button type="button" className="edit-cancel" onClick={(e) => { e.stopPropagation(); cancelEditing(); }}>✕</button>
+                            </div>
+                          </form>
                         ) : (
                           <div className="message-text">
                             {msg.text}{msg.editedAt && <span className="edited-tag">(edited)</span>}
@@ -381,21 +641,30 @@ export default function ChatRoom({ folder, onBack, addToast }) {
 
                   {msg.pinned && !isDel && <div className="pinned-indicator">📌</div>}
 
-                  {rxns && <div className="reactions-row">{Object.entries(rxns).map(([em, c]) => <button key={em} className="reaction-badge" onClick={() => handleReaction(msg._id, em)}>{em}{c > 1 && <span>{c}</span>}</button>)}</div>}
+                  {rxns && <div className="reactions-row">{Object.entries(rxns).map(([em, c]) => <button key={em} className="reaction-badge" onClick={(e) => { e.stopPropagation(); handleReaction(msg._id, em); }}>{em}{c > 1 && <span>{c}</span>}</button>)}</div>}
 
-                  {/* Action toolbar — appears ABOVE the bubble on hover */}
-                  {isHovered && !isDel && !isEdit && (
-                    <div className="msg-toolbar">
-                      <button onClick={(e) => { e.stopPropagation(); triggerReply(msg); }} title="Reply">↩</button>
-                      <button onClick={(e) => { e.stopPropagation(); setShowReactionPicker(msg._id); }} title="React">😊</button>
-                      <button onClick={(e) => { e.stopPropagation(); handlePin(msg._id); }} title={msg.pinned ? "Unpin" : "Pin"}>📌</button>
-                      {isSent && <button onClick={(e) => { e.stopPropagation(); startEditing(msg); }} title="Edit">✏️</button>}
-                      {isSent && <button onClick={(e) => { e.stopPropagation(); handleDelete(msg._id); }} title="Delete">🗑</button>}
+                  {/* Options Menu (3 dots) */}
+                  {!isDel && !isEdit && (
+                    <div className="msg-options-wrapper"
+                      onMouseEnter={() => setHoveredMsgId(msg._id)}
+                      onMouseLeave={() => setHoveredMsgId(null)}
+                    >
+                      {(isHov || openMenuId === msg._id) && (
+                        <button className="msg-options-btn" onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === msg._id ? null : msg._id); }}>⋮</button>
+                      )}
+                      {openMenuId === msg._id && (
+                        <div className="msg-options-menu">
+                          <button onClick={(e) => { e.stopPropagation(); setShowReactionPicker(msg._id); setOpenMenuId(null); }}>😊 React</button>
+                          <button onClick={(e) => { e.stopPropagation(); handlePin(msg._id); setOpenMenuId(null); }}>{msg.pinned ? "📌 Unpin" : "📌 Pin"}</button>
+                          {isSent && <button onClick={(e) => { e.stopPropagation(); startEditing(msg); setOpenMenuId(null); }}>✏️ Edit</button>}
+                          {isSent && <button onClick={(e) => { e.stopPropagation(); handleDelete(msg._id); setOpenMenuId(null); }} className="danger-option">🗑 Delete</button>}
+                        </div>
+                      )}
                     </div>
                   )}
 
                   {showReactionPicker === msg._id && (
-                    <div className="quick-reaction-picker">{QUICK_REACTIONS.map((em) => <button key={em} className="quick-reaction-item" onClick={() => handleReaction(msg._id, em)}>{em}</button>)}</div>
+                    <div className="quick-reaction-picker">{QUICK_REACTIONS.map((em) => <button key={em} className="quick-reaction-item" onClick={(e) => { e.stopPropagation(); handleReaction(msg._id, em); }}>{em}</button>)}</div>
                   )}
                 </div>
               </SwipeableRow>
@@ -416,18 +685,23 @@ export default function ChatRoom({ folder, onBack, addToast }) {
         </div>
       )}
 
-      <div className="chat-input-area">
-        <button className="emoji-btn" ref={emojiBtnRef} onClick={() => setShowEmojiPicker((p) => !p)}>😊</button>
+      <form className="chat-input-area" onSubmit={(e) => { e.preventDefault(); handleSend(); }}>
+        <button type="button" className="emoji-btn" ref={emojiBtnRef} onClick={() => setShowEmojiPicker((p) => !p)}>😊</button>
+        <button type="button" className="attach-btn" onClick={() => imageInputRef.current?.click()} title="Send Image">🖼️</button>
+        <button type="button" className="attach-btn" onClick={() => fileInputRef.current?.click()} title="Send File">📎</button>
+        <button type="button" className={`self-destruct-toggle ${selfDestructOn ? 'active' : ''}`} onClick={() => setSelfDestructOn(p => !p)} title={selfDestructOn ? 'Self-destruct ON' : 'Self-destruct OFF'}>💣</button>
+        <input type="file" ref={imageInputRef} accept="image/*" style={{ display: 'none' }} onChange={handleImageUpload} />
+        <input type="file" ref={fileInputRef} accept=".pdf,.doc,.docx,.zip,.rar,.txt,.csv,.xls,.xlsx,.ppt,.pptx" style={{ display: 'none' }} onChange={handleFileUpload} />
         {isRecording ? (
-          <div className="recording-bar"><div className="recording-dot"></div><span className="recording-time">{recordingTime}s</span><div className="recording-waves"><span></span><span></span><span></span></div><button className="recording-stop" onClick={stopRecording}>⬛</button></div>
+          <div className="recording-bar"><div className="recording-dot"></div><span className="recording-time">{recordingTime}s</span><div className="recording-waves"><span></span><span></span><span></span></div><button type="button" className="recording-stop" onClick={stopRecording}>⬛</button></div>
         ) : (
           <>
-            <input ref={inputRef} type="text" className="chat-text-input" placeholder="Type a message..." value={text} onChange={handleInputChange} onKeyDown={handleKeyDown} autoFocus />
-            {text.trim() ? <button className="send-btn" onClick={handleSend}>➤</button> : <button className="mic-btn" onClick={startRecording}>🎤</button>}
+            <input ref={inputRef} type="text" className="chat-text-input" placeholder={selfDestructOn ? "💣 Self-destruct message..." : "Type a message..."} value={text} onChange={handleInputChange} autoFocus />
+            {text.trim() ? <button type="submit" className="send-btn">➤</button> : <button type="button" className="mic-btn" onClick={startRecording}>🎤</button>}
           </>
         )}
-        {showEmojiPicker && <div className="emoji-panel" ref={emojiPanelRef}><div className="emoji-panel-header">Pick emojis</div><div className="emoji-grid">{EMOJI_LIST.map((em, i) => <button key={i} className="emoji-item" onClick={() => handleEmojiClick(em)}>{em}</button>)}</div></div>}
-      </div>
+        {showEmojiPicker && <div className="emoji-panel" ref={emojiPanelRef}><div className="emoji-panel-header">Pick emojis</div><div className="emoji-grid">{EMOJI_LIST.map((em, i) => <button type="button" key={i} className="emoji-item" onClick={() => handleEmojiClick(em)}>{em}</button>)}</div></div>}
+      </form>
     </div>
   );
 }

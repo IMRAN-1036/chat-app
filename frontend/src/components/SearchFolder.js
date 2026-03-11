@@ -33,11 +33,12 @@ export default function SearchFolder({ onFound, addToast }) {
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === "Enter") handleSearch();
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.key === "Enter" || e.keyCode === 13) handleSearch();
   };
 
   return (
-    <div className="glass-card">
+    <form className="glass-card" onSubmit={(e) => { e.preventDefault(); handleSearch(); }}>
       <div className="card-header">
         <div className="card-icon search">🔑</div>
         <h2 className="card-title">Join a Room</h2>
@@ -49,19 +50,18 @@ export default function SearchFolder({ onFound, addToast }) {
           placeholder="Enter room password..."
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          onKeyDown={handleKeyDown}
           disabled={loading}
           id="join-room-input"
         />
       </div>
       <button
+        type="submit"
         className="btn btn-secondary"
-        onClick={handleSearch}
         disabled={loading}
         id="join-room-btn"
       >
         {loading ? <div className="spinner"></div> : "🔓 Enter Room"}
       </button>
-    </div>
+    </form>
   );
 }
