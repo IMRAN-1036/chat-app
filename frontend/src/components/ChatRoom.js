@@ -231,7 +231,7 @@ export default function ChatRoom({ folder, onBack, addToast }) {
   const [playingAudioId, setPlayingAudioId] = useState(null);
   const [selfDestructOn, setSelfDestructOn] = useState(false);
   const [showBurnConfirm, setShowBurnConfirm] = useState(false);
-  const [imagePreview, setImagePreview] = useState(null);
+
 
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
@@ -320,7 +320,7 @@ export default function ChatRoom({ folder, onBack, addToast }) {
     });
 
     return () => socketRef.current.disconnect();
-  }, [API_URL, folder.password, soundEnabled, username]);
+  }, [API_URL, folder.password, soundEnabled, username, addToast]);
 
   const fetchInitialData = useCallback(async () => {
     try {

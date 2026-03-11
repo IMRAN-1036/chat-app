@@ -35,10 +35,7 @@ export default function CreateFolder({ addToast }) {
     }
   };
 
-  const handleKeyDown = (e) => {
-    if (e.isComposing || e.keyCode === 229) return;
-    if (e.key === "Enter" || e.keyCode === 13) handleCreate();
-  };
+
 
   return (
     <form className="glass-card" onSubmit={(e) => { e.preventDefault(); handleCreate(); }}>
