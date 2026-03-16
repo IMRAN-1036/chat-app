@@ -3,6 +3,7 @@ import CreateFolder from "./components/CreateFolder";
 import SearchFolder from "./components/SearchFolder";
 import ChatRoom from "./components/ChatRoom";
 import './App.css';
+import './components/StunningUI.css';
 
 function App() {
   const [folder, setFolder] = useState(null);
