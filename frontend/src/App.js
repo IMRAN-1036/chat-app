@@ -1,13 +1,27 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import CreateFolder from "./components/CreateFolder";
 import SearchFolder from "./components/SearchFolder";
 import ChatRoom from "./components/ChatRoom";
+import Authentication from "./components/Authentication";
+import Notifications from "./components/Notifications";
+import Cookies from "js-cookie";
 import './App.css';
 import './components/StunningUI.css';
 
 function App() {
   const [folder, setFolder] = useState(null);
   const [toasts, setToasts] = useState([]);
+  const [user, setUser] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    const token = Cookies.get("authToken");
+    const storedUser = localStorage.getItem("username");
+    if (token && storedUser) {
+      setUser(storedUser);
+      setIsAuthenticated(true);
+    }
+  }, []);
 
   const addToast = useCallback((message, type = "info") => {
     const id = Date.now();
@@ -21,6 +35,22 @@ function App() {
       }, 300);
     }, 3000);
   }, []);
+
+  const handleAuthenticated = (username) => {
+    setUser(username);
+    setIsAuthenticated(true);
+    localStorage.setItem("username", username);
+    addToast(`Welcome, ${username}!`, "success");
+  };
+
+  const handleLogout = () => {
+    Cookies.remove("authToken");
+    localStorage.removeItem("username");
+    setUser(null);
+    setIsAuthenticated(false);
+    setFolder(null);
+    addToast("Logged out successfully", "info");
+  };
 
   const toastIcons = { success: "✅", error: "❌", info: "💬" };
 
@@ -50,8 +80,28 @@ function App() {
         ))}
       </div>
 
+      {/* Header with Notifications and Logout */}
+      {isAuthenticated && (
+        <div className="top-bar">
+          <Notifications />
+          <div className="user-menu">
+            <span className="username">@{user}</span>
+            <button className="logout-btn" onClick={handleLogout}>Logout</button>
+          </div>
+        </div>
+      )}
+
       {/* Main content */}
-      {!folder ? (
+      {!isAuthenticated ? (
+        <div className="app-content" key="auth">
+          <div className="app-header">
+            <div className="app-logo">💬</div>
+            <h1 className="app-title">ChatVault</h1>
+            <p className="app-subtitle">Secure, production-ready messaging</p>
+          </div>
+          <Authentication onAuthenticated={handleAuthenticated} />
+        </div>
+      ) : !folder ? (
         <div className="app-content" key="lobby">
           <div className="app-header">
             <div className="app-logo">💬</div>

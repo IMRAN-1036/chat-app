@@ -9,6 +9,48 @@
   padding: 2rem 1rem;
 }
 
+.top-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 2rem;
+  z-index: 100;
+}
+
+.user-menu {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  padding: 0.5rem 1rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.username {
+  font-weight: 600;
+  color: #333;
+}
+
+.logout-btn {
+  background: transparent;
+  border: none;
+  color: #f5576c;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.logout-btn:hover {
+  transform: scale(1.05);
+  text-decoration: underline;
+}
+
 .bg-orbs {
   position: fixed;
   inset: 0;
