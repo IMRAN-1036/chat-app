@@ -4,7 +4,12 @@ import { io } from "socket.io-client";
 import { parseAICommand, isAICommand } from "./AIAssistant";
 import MessageSearch from "./MessageSearch";
 import UserProfile from "./UserProfile";
+import BookmarksPanel from "./BookmarksPanel";
+import ChatStats from "./ChatStats";
+import AdvancedSearch from "./AdvancedSearch";
+import ExportChat from "./ExportChat";
 import "./NewFeatures.css";
+import "./SubstantialFeatures.css";
 
 const EMOJI_LIST = [
   "😀","😂","🤣","😊","😍","🥰","😘","😎","🤩","🥳",
@@ -237,6 +242,10 @@ export default function ChatRoom({ folder, onBack, addToast }) {
   const [showBurnConfirm, setShowBurnConfirm] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showUserProfile, setShowUserProfile] = useState(false);
+  const [showBookmarks, setShowBookmarks] = useState(false);
+  const [showStats, setShowStats] = useState(false);
+  const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
+  const [showExport, setShowExport] = useState(false);
 
 
   const messagesEndRef = useRef(null);
@@ -555,14 +564,21 @@ export default function ChatRoom({ folder, onBack, addToast }) {
           </div>
         </div>
         <button className="header-icon-btn" onClick={toggleSound}>{soundEnabled ? "🔊" : "🔇"}</button>
-        <button className="header-icon-btn burn-btn" title="Burn Room">🔥</button>
-        <button className="header-icon-btn" onClick={() => setShowSearch(true)} title="Search Messages">🔍</button>
+        <button className="header-icon-btn" onClick={() => setShowStats(true)} title="Chat Statistics">📊</button>
+        <button className="header-icon-btn" onClick={() => setShowAdvancedSearch(true)} title="Advanced Search">🔎</button>
+        <button className="header-icon-btn" onClick={() => setShowBookmarks(true)} title="Bookmarks">⭐</button>
+        <button className="header-icon-btn" onClick={() => setShowExport(true)} title="Export Chat">📥</button>
+        <button className="header-icon-btn" onClick={() => setShowSearch(true)} title="Quick Search">🔍</button>
         <button className="header-icon-btn" onClick={() => setShowUserProfile(true)} title="User Profile">👤</button>
+        <button className="header-icon-btn burn-btn" onClick={() => setShowBurnConfirm(true)} title="Burn Room">🔥</button>
       </div>
 
       {showSearch && <MessageSearch messages={messages} onClose={() => setShowSearch(false)} />}
-      
       {showUserProfile && <UserProfile username={username} onClose={() => setShowUserProfile(false)} onSetStatus={(status) => { addToast(`Status updated: ${status}`, "success"); }} />}
+      {showBookmarks && <BookmarksPanel folder={folder} username={username} onClose={() => setShowBookmarks(false)} />}
+      {showStats && <ChatStats folder={folder} onClose={() => setShowStats(false)} />}
+      {showAdvancedSearch && <AdvancedSearch folder={folder} onClose={() => setShowAdvancedSearch(false)} />}
+      {showExport && <ExportChat folder={folder} onClose={() => setShowExport(false)} addToast={addToast} />}
 
       {showBurnConfirm && (
         <div className="username-overlay" onClick={() => setShowBurnConfirm(false)}>

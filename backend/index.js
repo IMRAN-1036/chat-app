@@ -35,7 +35,9 @@ mongoose.connect(process.env.MONGO_URI, {
 
 // Routes
 const chatRoutes = require('./routes/chatRoutes');
+const enhancedRoutes = require('./routes/enhancedRoutes');
 app.use('/api/chat', chatRoutes);
+app.use('/api/chat', enhancedRoutes);
 
 // Health check / root route
 app.get('/', (req, res) => {
