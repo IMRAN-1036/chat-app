@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import axios from "axios";
 import { io } from "socket.io-client";
+import { parseAICommand, isAICommand } from "./AIAssistant";
+import MessageSearch from "./MessageSearch";
+import UserProfile from "./UserProfile";
+import "./NewFeatures.css";
 
 const EMOJI_LIST = [
   "😀","😂","🤣","😊","😍","🥰","😘","😎","🤩","🥳",
@@ -231,6 +235,8 @@ export default function ChatRoom({ folder, onBack, addToast }) {
   const [playingAudioId, setPlayingAudioId] = useState(null);
   const [selfDestructOn, setSelfDestructOn] = useState(false);
   const [showBurnConfirm, setShowBurnConfirm] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [showUserProfile, setShowUserProfile] = useState(false);
 
 
   const messagesEndRef = useRef(null);
@@ -354,6 +360,24 @@ export default function ChatRoom({ folder, onBack, addToast }) {
   const handleInputChange = (e) => { setText(e.target.value); if (e.target.value.trim()) sendTypingIndicator(); };
 
   const handleSend = async () => {
+    // Check if it's an AI command
+    if (isAICommand(text)) {
+      const aiResponse = parseAICommand(text);
+      const aiMessage = {
+        sender: "🤖 ChatVault AI",
+        text: aiResponse,
+        type: "text",
+        timestamp: new Date().toISOString(),
+        readBy: [],
+        reactions: [],
+        _id: Date.now().toString()
+      };
+      setMessages([...messages, aiMessage]);
+      setText("");
+      setTimeout(() => scrollToBottom(), 100);
+      return;
+    }
+
     if (!text.trim()) return;
     const mt = text; setText("");
     setMessages((p) => [...p, { _id: `opt_${Date.now()}`, sender: username, text: mt, timestamp: new Date().toISOString(), readBy: [], reactions: [], replyTo: replyTo || null, type: "text", selfDestruct: selfDestructOn }]);
@@ -531,8 +555,14 @@ export default function ChatRoom({ folder, onBack, addToast }) {
           </div>
         </div>
         <button className="header-icon-btn" onClick={toggleSound}>{soundEnabled ? "🔊" : "🔇"}</button>
-        <button className="header-icon-btn burn-btn" onClick={() => setShowBurnConfirm(true)} title="Burn Room">🔥</button>
+        <button className="header-icon-btn burn-btn" title="Burn Room">🔥</button>
+        <button className="header-icon-btn" onClick={() => setShowSearch(true)} title="Search Messages">🔍</button>
+        <button className="header-icon-btn" onClick={() => setShowUserProfile(true)} title="User Profile">👤</button>
       </div>
+
+      {showSearch && <MessageSearch messages={messages} onClose={() => setShowSearch(false)} />}
+      
+      {showUserProfile && <UserProfile username={username} onClose={() => setShowUserProfile(false)} onSetStatus={(status) => { addToast(`Status updated: ${status}`, "success"); }} />}
 
       {showBurnConfirm && (
         <div className="username-overlay" onClick={() => setShowBurnConfirm(false)}>
