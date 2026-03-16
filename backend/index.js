@@ -33,13 +33,17 @@ mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/chatapp', {
 .then(() => console.log('✅ MongoDB connected'))
 .catch(err => console.error('❌ MongoDB connection error:', err));
 // Routes
-const chatRoutes = require(\'./routes/chatRoutes\');
-const enhancedRoutes = require(\'./routes/enhancedRoutes\');
-const authRoutes = require(\'./routes/authRoutes\');
+const chatRoutes = require('./routes/chatRoutes');
+const enhancedRoutes = require('./routes/enhancedRoutes');
+const authRoutes = require('./routes/authRoutes');
+const groupChatRoutes = require('./routes/groupChatRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 
-app.use(\'/api/chat\', chatRoutes);
-app.use(\'/api/chat\', enhancedRoutes);
-app.use(\'/api/auth\', authRoutes);
+app.use('/api/chat', chatRoutes);
+app.use('/api/chat', enhancedRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/groups', groupChatRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Health check / root route
 app.get('/', (req, res) => {
