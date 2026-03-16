@@ -27,17 +27,19 @@ app.use(cors({
 }));
 
 // MongoDB Connection
-mongoose.connect(process.env.MONGO_URI, {
+mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/chatapp', {
   family: 4 // Force IPv4 to prevent Render DNS timeout
 })
 .then(() => console.log('✅ MongoDB connected'))
 .catch(err => console.error('❌ MongoDB connection error:', err));
-
 // Routes
-const chatRoutes = require('./routes/chatRoutes');
-const enhancedRoutes = require('./routes/enhancedRoutes');
-app.use('/api/chat', chatRoutes);
-app.use('/api/chat', enhancedRoutes);
+const chatRoutes = require(\'./routes/chatRoutes\');
+const enhancedRoutes = require(\'./routes/enhancedRoutes\');
+const authRoutes = require(\'./routes/authRoutes\');
+
+app.use(\'/api/chat\', chatRoutes);
+app.use(\'/api/chat\', enhancedRoutes);
+app.use(\'/api/auth\', authRoutes);
 
 // Health check / root route
 app.get('/', (req, res) => {

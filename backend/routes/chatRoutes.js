@@ -1,4 +1,5 @@
 const express = require('express');
+const auth = require('../middleware/auth');
 const router = express.Router();
 const ChatFolder = require('../models/ChatFolder');
 const axios = require('axios');
@@ -7,7 +8,7 @@ const axios = require('axios');
 router.get('/', (req, res) => res.send('Backend running'));
 
 // Create a chat folder
-router.post('/create', async (req, res) => {
+router.post('/create', auth, async (req, res) => {
   const { password, username } = req.body;
   try {
     const existing = await ChatFolder.findOne({ password });
@@ -21,7 +22,7 @@ router.post('/create', async (req, res) => {
 });
 
 // Find folder by password
-router.post('/find', async (req, res) => {
+router.post('/find', auth, async (req, res) => {
   const { password } = req.body;
   try {
     const folder = await ChatFolder.findOne({ password });
@@ -33,7 +34,7 @@ router.post('/find', async (req, res) => {
 });
 
 // Post a message (text, voice, image, file — with optional replyTo and selfDestruct)
-router.post('/message', async (req, res) => {
+router.post('/message', auth, async (req, res) => {
   const { password, sender, text, replyTo, type, audioData, audioDuration, selfDestruct, imageData, fileName, fileData, fileSize } = req.body;
   try {
     const folder = await ChatFolder.findOne({ password });
@@ -74,7 +75,7 @@ router.post('/message', async (req, res) => {
 });
 
 // Poll — messages + typing + online users + pinned
-router.post('/poll', async (req, res) => {
+router.post('/poll', auth, async (req, res) => {
   const { password } = req.body;
   try {
     const folder = await ChatFolder.findOne({ password });
@@ -114,7 +115,7 @@ router.post('/poll', async (req, res) => {
 });
 
 // Typing indicator
-router.post('/typing', async (req, res) => {
+router.post('/typing', auth, async (req, res) => {
   const { password, username } = req.body;
   try {
     const folder = await ChatFolder.findOne({ password });
@@ -130,7 +131,7 @@ router.post('/typing', async (req, res) => {
 });
 
 // Online heartbeat
-router.post('/heartbeat', async (req, res) => {
+router.post('/heartbeat', auth, async (req, res) => {
   const { password, username } = req.body;
   try {
     const folder = await ChatFolder.findOne({ password });
@@ -146,7 +147,7 @@ router.post('/heartbeat', async (req, res) => {
 });
 
 // Read receipts
-router.post('/read', async (req, res) => {
+router.post('/read', auth, async (req, res) => {
   const { password, username, messageIds } = req.body;
   try {
     const folder = await ChatFolder.findOne({ password });
@@ -171,7 +172,7 @@ router.post('/read', async (req, res) => {
 });
 
 // Toggle reaction
-router.post('/react', async (req, res) => {
+router.post('/react', auth, async (req, res) => {
   const { password, username, messageId, emoji } = req.body;
   try {
     const folder = await ChatFolder.findOne({ password });
@@ -191,7 +192,7 @@ router.post('/react', async (req, res) => {
 });
 
 // Delete message (soft delete)
-router.post('/delete', async (req, res) => {
+router.post('/delete', auth, async (req, res) => {
   const { password, username, messageId } = req.body;
   try {
     const folder = await ChatFolder.findOne({ password });
@@ -211,7 +212,7 @@ router.post('/delete', async (req, res) => {
 });
 
 // Edit message
-router.post('/edit', async (req, res) => {
+router.post('/edit', auth, async (req, res) => {
   const { password, username, messageId, newText } = req.body;
   try {
     const folder = await ChatFolder.findOne({ password });
@@ -231,7 +232,7 @@ router.post('/edit', async (req, res) => {
 });
 
 // Pin/Unpin message
-router.post('/pin', async (req, res) => {
+router.post('/pin', auth, async (req, res) => {
   const { password, messageId } = req.body;
   try {
     const folder = await ChatFolder.findOne({ password });
@@ -254,7 +255,7 @@ router.post('/pin', async (req, res) => {
 });
 
 // Forward message to another room
-router.post('/forward', async (req, res) => {
+router.post('/forward', auth, async (req, res) => {
   const { fromPassword, toPassword, messageId, sender } = req.body;
   try {
     const fromFolder = await ChatFolder.findOne({ password: fromPassword });
@@ -281,7 +282,7 @@ router.post('/forward', async (req, res) => {
 });
 
 // Burn Room — wipe all messages (creator only)
-router.post('/burn', async (req, res) => {
+router.post('/burn', auth, async (req, res) => {
   const { password, username } = req.body;
   try {
     const folder = await ChatFolder.findOne({ password });
@@ -301,15 +302,15 @@ router.post('/burn', async (req, res) => {
 });
 
 // Link Preview Proxy
-router.get('/link-preview', async (req, res) => {
+router.get('/link-preview', auth, async (req, res) => {
   const { url } = req.query;
   if (!url) return res.status(400).json({ message: 'URL required' });
   try {
     const response = await axios.get(url, { timeout: 5000, headers: { 'User-Agent': 'Mozilla/5.0' } });
     const html = response.data;
     const getTag = (name, attr = 'content') => {
-      const r = new RegExp(`<meta[^>]*property=["']${name}["'][^>]*${attr}=["']([^"']*)["']`, 'i');
-      const r2 = new RegExp(`<meta[^>]*${attr}=["']([^"']*)["'][^>]*property=["']${name}["']`, 'i');
+      const r = new RegExp(`<meta[^>]*property="${name}"[^>]*${attr}="([^"]*)"`, 'i');
+      const r2 = new RegExp(`<meta[^>]*${attr}="([^"]*)"[^>]*property="${name}"`, 'i');
       return (html.match(r) || html.match(r2) || [])[1] || '';
     };
     const title = getTag('og:title') || (html.match(/<title[^>]*>([^<]*)<\/title>/i) || [])[1] || '';
