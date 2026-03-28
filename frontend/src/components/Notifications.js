@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import apiClient from "../api/client";
 import Cookies from "js-cookie";
 import "./Notifications.css";
-
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:2000";
 
 export default function Notifications() {
   const [notifications, setNotifications] = useState([]);
@@ -20,9 +18,7 @@ export default function Notifications() {
 
   const fetchMentions = async () => {
     try {
-      const response = await axios.get(`${API_URL}/api/notifications/mentions`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await apiClient.get(`/api/notifications/mentions`);
       setNotifications(response.data);
       setUnreadCount(response.data.length);
     } catch (err) {
@@ -32,10 +28,9 @@ export default function Notifications() {
 
   const clearMentions = async () => {
     try {
-      await axios.post(
-        `${API_URL}/api/notifications/mentions/clear`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
+      await apiClient.post(
+        `/api/notifications/mentions/clear`,
+        {}
       );
       setNotifications([]);
       setUnreadCount(0);

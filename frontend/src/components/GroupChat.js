@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
-import axios from "axios";
+import apiClient from "../api/client";
 import Cookies from "js-cookie";
 import "./GroupChat.css";
-
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:2000";
 
 export default function GroupChat({ groupId, onBack, addToast }) {
   const [group, setGroup] = useState(null);
@@ -30,9 +28,7 @@ export default function GroupChat({ groupId, onBack, addToast }) {
 
   const fetchGroup = async () => {
     try {
-      const response = await axios.get(`${API_URL}/api/groups/${groupId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await apiClient.get(`/api/groups/${groupId}`);
       setGroup(response.data);
       setMessages(response.data.messages || []);
       setLoading(false);
@@ -49,14 +45,13 @@ export default function GroupChat({ groupId, onBack, addToast }) {
     const mentionedUsers = extractMentions(inputText);
 
     try {
-      await axios.post(
-        `${API_URL}/api/groups/${groupId}/message`,
+      await apiClient.post(
+        `/api/groups/${groupId}/message`,
         {
           text: inputText,
           type: "text",
           mentions: mentionedUsers
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
+        }
       );
 
       setInputText("");
@@ -89,10 +84,9 @@ export default function GroupChat({ groupId, onBack, addToast }) {
 
   const handleDeleteMessage = async (messageId) => {
     try {
-      await axios.post(
-        `${API_URL}/api/groups/${groupId}/message/${messageId}/delete`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
+      await apiClient.post(
+        `/api/groups/${groupId}/message/${messageId}/delete`,
+        {}
       );
       addToast("Message deleted", "success");
       fetchGroup();
@@ -103,10 +97,9 @@ export default function GroupChat({ groupId, onBack, addToast }) {
 
   const handleReactToMessage = async (messageId, emoji) => {
     try {
-      await axios.post(
-        `${API_URL}/api/groups/${groupId}/message/${messageId}/react`,
-        { emoji },
-        { headers: { Authorization: `Bearer ${token}` } }
+      await apiClient.post(
+        `/api/groups/${groupId}/message/${messageId}/react`,
+        { emoji }
       );
       fetchGroup();
     } catch (err) {

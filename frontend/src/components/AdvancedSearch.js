@@ -1,7 +1,5 @@
 import React, { useState } from "react";
-import axios from "axios";
-
-const API_URL = process.env.REACT_APP_API_URL || "";
+import apiClient from "../api/client";
 
 export default function AdvancedSearch({ folder, onClose }) {
   const [query, setQuery] = useState("");
@@ -20,7 +18,7 @@ export default function AdvancedSearch({ folder, onClose }) {
     setSearched(true);
 
     try {
-      const res = await axios.post(`${API_URL}/api/chat/search-advanced`, {
+      const res = await apiClient.post(`/api/chat/search-advanced`, {
         password: folder.password,
         query: query || undefined,
         sender: sender || undefined,

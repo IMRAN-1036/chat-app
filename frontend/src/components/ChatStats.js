@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
-
-const API_URL = process.env.REACT_APP_API_URL || "";
+import apiClient from "../api/client";
 
 export default function ChatStats({ folder, onClose }) {
   const [stats, setStats] = useState(null);
@@ -13,7 +11,7 @@ export default function ChatStats({ folder, onClose }) {
 
   const fetchStats = async () => {
     try {
-      const res = await axios.post(`${API_URL}/api/chat/stats`, {
+      const res = await apiClient.post(`/api/chat/stats`, {
         password: folder.password
       });
       setStats(res.data);

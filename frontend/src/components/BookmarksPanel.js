@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
-
-const API_URL = process.env.REACT_APP_API_URL || "";
+import apiClient from "../api/client";
 
 export default function BookmarksPanel({ folder, username, onClose }) {
   const [bookmarks, setBookmarks] = useState([]);
@@ -13,7 +11,7 @@ export default function BookmarksPanel({ folder, username, onClose }) {
 
   const fetchBookmarks = async () => {
     try {
-      const res = await axios.post(`${API_URL}/api/chat/bookmarks`, {
+      const res = await apiClient.post(`/api/chat/bookmarks`, {
         password: folder.password,
         username
       });
@@ -27,7 +25,7 @@ export default function BookmarksPanel({ folder, username, onClose }) {
 
   const handleRemoveBookmark = async (messageId) => {
     try {
-      await axios.post(`${API_URL}/api/chat/bookmark`, {
+      await apiClient.post(`/api/chat/bookmark`, {
         password: folder.password,
         username,
         messageId

@@ -1,10 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const ChatFolder = require('../models/ChatFolder');
+const auth = require('../middleware/auth');
 
 // ===== BOOKMARKING =====
 // Bookmark a message
-router.post('/bookmark', async (req, res) => {
+router.post('/bookmark', auth, async (req, res) => {
   const { password, username, messageId } = req.body;
   try {
     const folder = await ChatFolder.findOne({ password });
@@ -32,7 +33,7 @@ router.post('/bookmark', async (req, res) => {
 });
 
 // Get bookmarked messages for a user
-router.post('/bookmarks', async (req, res) => {
+router.post('/bookmarks', auth, async (req, res) => {
   const { password, username } = req.body;
   try {
     const folder = await ChatFolder.findOne({ password });
@@ -50,7 +51,7 @@ router.post('/bookmarks', async (req, res) => {
 
 // ===== CHAT EXPORT =====
 // Export messages as JSON
-router.post('/export', async (req, res) => {
+router.post('/export', auth, async (req, res) => {
   const { password, format = 'json' } = req.body;
   try {
     const folder = await ChatFolder.findOne({ password });
@@ -100,7 +101,7 @@ router.post('/export', async (req, res) => {
 
 // ===== ROOM STATISTICS & ANALYTICS =====
 // Get room statistics
-router.post('/stats', async (req, res) => {
+router.post('/stats', auth, async (req, res) => {
   const { password } = req.body;
   try {
     const folder = await ChatFolder.findOne({ password });
@@ -155,7 +156,7 @@ router.post('/stats', async (req, res) => {
 
 // ===== ADVANCED SEARCH =====
 // Advanced message search with filters
-router.post('/search-advanced', async (req, res) => {
+router.post('/search-advanced', auth, async (req, res) => {
   const { password, query, sender, startDate, endDate, messageType, hasReactions } = req.body;
   try {
     const folder = await ChatFolder.findOne({ password });
@@ -202,7 +203,7 @@ router.post('/search-advanced', async (req, res) => {
 
 // ===== ROOM SETTINGS =====
 // Update room settings
-router.post('/settings', async (req, res) => {
+router.post('/settings', auth, async (req, res) => {
   const { password, username, settings } = req.body;
   try {
     const folder = await ChatFolder.findOne({ password });
@@ -226,7 +227,7 @@ router.post('/settings', async (req, res) => {
 });
 
 // Get room settings
-router.post('/settings/get', async (req, res) => {
+router.post('/settings/get', auth, async (req, res) => {
   const { password } = req.body;
   try {
     const folder = await ChatFolder.findOne({ password });

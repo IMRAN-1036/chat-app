@@ -1,7 +1,5 @@
 import React, { useState } from "react";
-import axios from "axios";
-
-const API_URL = process.env.REACT_APP_API_URL || "";
+import apiClient from "../api/client";
 
 export default function ExportChat({ folder, onClose, addToast }) {
   const [exporting, setExporting] = useState(false);
@@ -10,8 +8,8 @@ export default function ExportChat({ folder, onClose, addToast }) {
   const handleExport = async () => {
     setExporting(true);
     try {
-      const response = await axios.post(
-        `${API_URL}/api/chat/export`,
+      const response = await apiClient.post(
+        `/api/chat/export`,
         { password: folder.password, format },
         { responseType: format === "csv" ? "blob" : "json" }
       );
