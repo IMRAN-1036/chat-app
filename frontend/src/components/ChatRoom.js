@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import axios from "axios";
+// import axios from "axios";
 import { io } from "socket.io-client";
 import { parseAICommand, isAICommand } from "./AIAssistant";
 import MessageSearch from "./MessageSearch";
@@ -336,7 +336,7 @@ export default function ChatRoom({ folder, onBack, addToast }) {
 
   const fetchInitialData = useCallback(async () => {
     try {
-      const res = await axios.post(`${API_URL}/api/chat/poll`, { password: folder.password });
+      const res = await apiClient.post(`/api/chat/poll`, { password: folder.password });
       if (res.data) {
         if (res.data.messages) setMessages(res.data.messages);
         if (res.data.onlineUsers) setOnlineUsers(res.data.onlineUsers);
@@ -348,11 +348,11 @@ export default function ChatRoom({ folder, onBack, addToast }) {
   const sendReadReceipts = useCallback(async (msgs) => {
     if (!username) return;
     const ids = msgs.filter((m) => m.sender !== username && !m.deletedAt && (!m.readBy || !m.readBy.some((r) => r.username === username))).map((m) => m._id).filter(Boolean);
-    if (ids.length) try { await axios.post(`${API_URL}/api/chat/read`, { password: folder.password, username, messageIds: ids }); } catch (e) {}
+    if (ids.length) try { await apiClient.post(`/api/chat/read`, { password: folder.password, username, messageIds: ids }); } catch (e) {}
   }, [API_URL, folder.password, username]);
 
   useEffect(() => { fetchInitialData(); }, [fetchInitialData]);
-  useEffect(() => { if (!username) return; const b = async () => { try { await axios.post(`${API_URL}/api/chat/heartbeat`, { password: folder.password, username }); } catch (e) {} }; b(); const i = setInterval(b, 5000); return () => clearInterval(i); }, [API_URL, folder.password, username]);
+  useEffect(() => { if (!username) return; const b = async () => { try { await apiClient.post(`/api/chat/heartbeat`, { password: folder.password, username }); } catch (e) {} }; b(); const i = setInterval(b, 5000); return () => clearInterval(i); }, [API_URL, folder.password, username]);
   // Re-sync online users occasionally as a fallback
   useEffect(() => { const i = setInterval(fetchInitialData, 10000); return () => clearInterval(i); }, [fetchInitialData]);
   useEffect(() => { if (messages.length > 0 && username) sendReadReceipts(messages); }, [messages, username, sendReadReceipts]);
@@ -392,7 +392,7 @@ export default function ChatRoom({ folder, onBack, addToast }) {
     if (replyTo) d.replyTo = { messageId: replyTo._id, sender: replyTo.sender, text: replyTo.text };
     if (selfDestructOn) d.selfDestruct = true;
     setReplyTo(null);
-    try { await axios.post(`${API_URL}/api/chat/message`, d); } catch (e) { addToast("Failed", "error"); }
+    try { await apiClient.post(`/api/chat/message`, d); } catch (e) { addToast("Failed", "error"); }
     inputRef.current?.focus();
   };
 
@@ -401,7 +401,7 @@ export default function ChatRoom({ folder, onBack, addToast }) {
   const handleBurnRoom = async () => {
     setShowBurnConfirm(false);
     try {
-      await axios.post(`${API_URL}/api/chat/burn`, { password: folder.password, username });
+      await apiClient.post(`/api/chat/burn`, { password: folder.password, username });
       addToast("Room burned 🔥 All messages wiped!", "success");
     } catch (e) {
       addToast(e.response?.data?.message || "Failed to burn room", "error");
@@ -430,7 +430,7 @@ export default function ChatRoom({ folder, onBack, addToast }) {
         const compressed = canvas.toDataURL('image/jpeg', 0.7);
         isSendingRef.current = true;
         try {
-          const r = await axios.post(`${API_URL}/api/chat/message`, { password: folder.password, sender: username, type: 'image', imageData: compressed, text: '🖼️ Image', selfDestruct: selfDestructOn || undefined });
+          const r = await apiClient.post(`/api/chat/message`, { password: folder.password, sender: username, type: 'image', imageData: compressed, text: '🖼️ Image', selfDestruct: selfDestructOn || undefined });
           if (r.data?.folder) setMessages(r.data.folder.messages);
           if (soundEnabled) playSound('send');
         } catch (err) { addToast('Failed to send image', 'error'); }
@@ -451,7 +451,7 @@ export default function ChatRoom({ folder, onBack, addToast }) {
     reader.onloadend = async () => {
       isSendingRef.current = true;
       try {
-        const r = await axios.post(`${API_URL}/api/chat/message`, { password: folder.password, sender: username, type: 'file', fileName: file.name, fileData: reader.result, fileSize: file.size, text: `📎 ${file.name}`, selfDestruct: selfDestructOn || undefined });
+        const r = await apiClient.post(`/api/chat/message`, { password: folder.password, sender: username, type: 'file', fileName: file.name, fileData: reader.result, fileSize: file.size, text: `📎 ${file.name}`, selfDestruct: selfDestructOn || undefined });
         if (r.data?.folder) setMessages(r.data.folder.messages);
         if (soundEnabled) playSound('send');
       } catch (err) { addToast('Failed to send file', 'error'); }
@@ -474,7 +474,7 @@ export default function ChatRoom({ folder, onBack, addToast }) {
         const reader = new FileReader();
         reader.onloadend = async () => {
           const dur = recordingTimeRef.current; isSendingRef.current = true;
-          try { const r = await axios.post(`${API_URL}/api/chat/message`, { password: folder.password, sender: username, type: "voice", audioData: reader.result, audioDuration: dur });
+          try { const r = await apiClient.post(`/api/chat/message`, { password: folder.password, sender: username, type: "voice", audioData: reader.result, audioDuration: dur });
             if (r.data?.folder) setMessages(r.data.folder.messages); if (soundEnabled) playSound("send");
           } catch (e) { addToast("Failed", "error"); } finally { isSendingRef.current = false; }
         }; reader.readAsDataURL(blob);
@@ -511,12 +511,12 @@ export default function ChatRoom({ folder, onBack, addToast }) {
     navigator.clipboard.writeText(msgText).then(() => { setCopyToast(Date.now()); setTimeout(() => setCopyToast(null), 1500); });
   }, []);
 
-  const handleReaction = async (id, em = "❤️") => { setShowReactionPicker(null); try { const r = await axios.post(`${API_URL}/api/chat/react`, { password: folder.password, username, messageId: id, emoji: em }); if (r.data?.folder) setMessages(r.data.folder.messages); } catch (e) {} };
-  const handleDelete = async (id) => { try { const r = await axios.post(`${API_URL}/api/chat/delete`, { password: folder.password, username, messageId: id }); if (r.data?.folder) setMessages(r.data.folder.messages); } catch (e) {} };
+  const handleReaction = async (id, em = "❤️") => { setShowReactionPicker(null); try { const r = await apiClient.post(`/api/chat/react`, { password: folder.password, username, messageId: id, emoji: em }); if (r.data?.folder) setMessages(r.data.folder.messages); } catch (e) {} };
+  const handleDelete = async (id) => { try { const r = await apiClient.post(`/api/chat/delete`, { password: folder.password, username, messageId: id }); if (r.data?.folder) setMessages(r.data.folder.messages); } catch (e) {} };
   const startEditing = (m) => { setEditingMsgId(m._id); setEditText(m.text); };
   const cancelEditing = () => { setEditingMsgId(null); setEditText(""); };
-  const saveEdit = async () => { if (!editText.trim()) return; try { const r = await axios.post(`${API_URL}/api/chat/edit`, { password: folder.password, username, messageId: editingMsgId, newText: editText }); if (r.data?.folder) setMessages(r.data.folder.messages); } catch (e) {} cancelEditing(); };
-  const handlePin = async (id) => { try { const r = await axios.post(`${API_URL}/api/chat/pin`, { password: folder.password, messageId: id }); if (r.data?.folder) setMessages(r.data.folder.messages); } catch (e) { addToast(e.response?.data?.message || "Failed", "error"); } };
+  const saveEdit = async () => { if (!editText.trim()) return; try { const r = await apiClient.post(`/api/chat/edit`, { password: folder.password, username, messageId: editingMsgId, newText: editText }); if (r.data?.folder) setMessages(r.data.folder.messages); } catch (e) {} cancelEditing(); };
+  const handlePin = async (id) => { try { const r = await apiClient.post(`/api/chat/pin`, { password: folder.password, messageId: id }); if (r.data?.folder) setMessages(r.data.folder.messages); } catch (e) { addToast(e.response?.data?.message || "Failed", "error"); } };
   const toggleSound = () => { const n = !soundEnabled; setSoundEnabled(n); localStorage.setItem("chatvault_sound", n ? "on" : "off"); };
 
   const getReadCount = (m) => m.readBy ? m.readBy.filter((r) => r.username !== m.sender).length : 0;
