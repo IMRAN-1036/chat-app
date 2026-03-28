@@ -1,6 +1,7 @@
 {
   "version": 2,
-  "buildCommand": "cd frontend && npm install --legacy-peer-deps && npm run build",
+  "installCommand": "cd frontend && npm install --legacy-peer-deps",
+  "buildCommand": "cd frontend && npm run build",
   "outputDirectory": "frontend/build",
   "env": {
     "REACT_APP_API_URL": "https://chat-app-n88p.onrender.com",
