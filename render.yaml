@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: chat-app
+    env: node
+    buildCommand: npm run build
+    startCommand: node backend/index.js
+    healthCheckPath: /api/chat
+    envVars:
+      - key: PORT
+        value: 2000
+      - key: CI
+        value: false
+      - key: NODE_OPTIONS
+        value: --max_old_space_size=400
