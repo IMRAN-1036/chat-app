@@ -1,0 +1,19 @@
+{
+  "dependencies_to_add": {
+    "dompurify": "^3.0.6",
+    "react-window": "^1.8.10",
+    "react-query": "^3.39.3",
+    "prop-types": "^15.8.1",
+    "date-fns": "^2.30.0"
+  },
+  "devDependencies_to_add": {
+    "@testing-library/react": "^14.0.0",
+    "@testing-library/jest-dom": "^6.1.4",
+    "@testing-library/user-event": "^14.5.1",
+    "jest": "^29.7.0",
+    "eslint": "^8.51.0",
+    "eslint-plugin-react": "^7.33.2",
+    "prettier": "^3.0.3"
+  },
+  "installation_command": "npm install dompurify react-window react-query prop-types date-fns && npm install --save-dev @testing-library/react @testing-library/jest-dom @testing-library/user-event jest eslint eslint-plugin-react prettier"
+}

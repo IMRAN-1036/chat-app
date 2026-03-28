@@ -1,0 +1,438 @@
+/**
+ * Responsive Design Fixes
+ * Handles UI/UX issues on different screen sizes
+ */
+
+/* ===== MOBILE OPTIMIZATIONS (< 768px) ===== */
+@media (max-width: 768px) {
+  /* Fix header button overflow */
+  .chat-header {
+    gap: 0.25rem;
+    padding: 0.5rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .header-icon-btn {
+    padding: 0.4rem 0.5rem;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+  }
+
+  /* Hide secondary buttons on mobile */
+  .header-icon-btn.secondary {
+    display: none;
+  }
+
+  /* Show mobile menu toggle */
+  .header-menu-toggle {
+    display: flex;
+  }
+
+  /* Make input area sticky */
+  .chat-input-area {
+    position: sticky;
+    bottom: 0;
+    z-index: 100;
+    padding: 0.75rem;
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    border-top: 1px solid var(--border-color);
+  }
+
+  /* Adjust message input */
+  .message-input {
+    padding: 0.6rem 0.8rem;
+    font-size: 0.9rem;
+  }
+
+  /* Reduce modal width on mobile */
+  .advanced-search-modal,
+  .export-modal,
+  .message-search-modal {
+    width: 95% !important;
+    max-width: 100% !important;
+    max-height: 80vh !important;
+    border-radius: var(--radius-lg);
+  }
+
+  /* Adjust emoji picker size */
+  .emoji-picker {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 250px !important;
+  }
+
+  /* Fix panels on mobile */
+  .bookmarks-panel,
+  .stats-panel {
+    width: 100% !important;
+    max-width: 100% !important;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  }
+
+  /* Adjust message item */
+  .message-item {
+    padding: 0.75rem 0.5rem;
+  }
+
+  .message-content {
+    max-width: 90vw;
+  }
+
+  /* Reduce padding on cards */
+  .glass-card {
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+  }
+
+  /* Fix button sizes */
+  .btn,
+  .btn-primary,
+  .btn-secondary {
+    padding: 0.7rem 1rem;
+    font-size: 0.9rem;
+    min-height: 44px; /* Touch target size */
+  }
+
+  /* Adjust form inputs */
+  input,
+  textarea,
+  select {
+    font-size: 16px; /* Prevents zoom on iOS */
+    padding: 0.75rem;
+    min-height: 44px;
+  }
+
+  /* Fix modals on mobile */
+  .username-modal,
+  .modal-content {
+    width: 90vw;
+    max-width: 100%;
+    margin: auto;
+  }
+
+  /* Adjust search form */
+  .search-form {
+    max-height: 35%;
+  }
+
+  .search-row {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  /* Fix reaction picker */
+  .quick-reaction-picker {
+    left: auto;
+    right: 0;
+    max-width: 90vw;
+  }
+
+  /* Adjust message menu */
+  .msg-options-menu {
+    right: 0;
+    left: auto;
+    min-width: 150px;
+  }
+
+  /* Fix online users list */
+  .online-users-list {
+    max-height: 60vh;
+    width: 90vw;
+  }
+
+  /* Adjust pinned messages */
+  .pinned-messages-panel {
+    width: 90vw;
+    max-width: 100%;
+  }
+
+  /* Fix header info */
+  .chat-header-info {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .chat-room-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.9rem;
+  }
+
+  /* Adjust toast notifications */
+  .toast-notification {
+    width: 90vw;
+    max-width: 100%;
+    left: 5vw;
+    right: 5vw;
+    bottom: 1rem;
+  }
+
+  /* Fix scroll button */
+  .scroll-to-bottom-btn {
+    bottom: 5rem;
+    right: 0.5rem;
+  }
+
+  /* Adjust typing indicator */
+  .typing-indicator {
+    font-size: 0.8rem;
+    padding: 0.5rem 0.75rem;
+  }
+
+  /* Fix message reactions */
+  .message-reactions {
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+
+  .reaction-btn {
+    padding: 0.3rem 0.5rem;
+    font-size: 0.75rem;
+  }
+
+  /* Adjust file upload area */
+  .file-upload-area {
+    padding: 1rem;
+    min-height: 100px;
+  }
+
+  /* Fix voice recording UI */
+  .recording-indicator {
+    font-size: 0.85rem;
+    padding: 0.5rem 0.75rem;
+  }
+
+  /* Adjust statistics cards */
+  .stat-card {
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .stat-value {
+    font-size: 1.5rem;
+  }
+
+  /* Fix search results */
+  .search-results-list {
+    max-height: 40vh;
+  }
+
+  .search-result {
+    padding: 0.75rem;
+  }
+
+  /* Adjust bookmark items */
+  .bookmark-item {
+    padding: 0.75rem;
+  }
+
+  /* Fix export modal */
+  .format-options {
+    gap: 0.75rem;
+  }
+
+  .format-option {
+    padding: 0.75rem;
+  }
+
+  /* Adjust profile modal */
+  .user-profile-modal {
+    width: 90vw;
+    max-width: 100%;
+    padding: 1.5rem 1rem;
+  }
+
+  .profile-avatar {
+    width: 60px;
+    height: 60px;
+    font-size: 1.5rem;
+  }
+
+  .profile-name {
+    font-size: 1.2rem;
+  }
+}
+
+/* ===== TABLET OPTIMIZATIONS (768px - 1024px) ===== */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .chat-header {
+    gap: 0.4rem;
+  }
+
+  .header-icon-btn {
+    padding: 0.5rem 0.6rem;
+    font-size: 0.95rem;
+  }
+
+  .message-item {
+    padding: 0.8rem;
+  }
+
+  .glass-card {
+    padding: 1.3rem;
+  }
+
+  .advanced-search-modal,
+  .export-modal {
+    width: 85%;
+    max-width: 600px;
+  }
+
+  .bookmarks-panel,
+  .stats-panel {
+    max-width: 400px;
+  }
+}
+
+/* ===== DESKTOP OPTIMIZATIONS (> 1024px) ===== */
+@media (min-width: 1025px) {
+  .chat-header {
+    gap: 0.6rem;
+  }
+
+  .header-icon-btn {
+    padding: 0.6rem 0.8rem;
+    font-size: 1rem;
+  }
+
+  .message-item {
+    padding: 1rem;
+  }
+
+  .glass-card {
+    padding: 1.8rem;
+  }
+
+  /* Show all buttons on desktop */
+  .header-icon-btn.secondary {
+    display: flex;
+  }
+
+  .header-menu-toggle {
+    display: none;
+  }
+
+  /* Better modal sizing */
+  .advanced-search-modal {
+    width: 600px;
+  }
+
+  .export-modal {
+    width: 500px;
+  }
+
+  .bookmarks-panel,
+  .stats-panel {
+    max-width: 450px;
+  }
+
+  /* Improve emoji picker on desktop */
+  .emoji-picker {
+    width: 350px;
+    max-height: 400px;
+  }
+}
+
+/* ===== LANDSCAPE MODE ===== */
+@media (orientation: landscape) and (max-height: 600px) {
+  .chat-header {
+    padding: 0.4rem;
+  }
+
+  .message-item {
+    padding: 0.5rem;
+  }
+
+  .chat-input-area {
+    padding: 0.5rem;
+  }
+
+  .message-input {
+    padding: 0.4rem 0.6rem;
+    font-size: 0.85rem;
+  }
+
+  .emoji-picker {
+    max-height: 300px;
+  }
+
+  .advanced-search-modal,
+  .export-modal {
+    max-height: 90vh;
+  }
+}
+
+/* ===== PRINT STYLES ===== */
+@media print {
+  .chat-header,
+  .chat-input-area,
+  .header-icon-btn,
+  .scroll-to-bottom-btn,
+  .toast-notification {
+    display: none;
+  }
+
+  .message-item {
+    page-break-inside: avoid;
+    border: 1px solid #ddd;
+    margin-bottom: 1rem;
+  }
+
+  .message-content {
+    color: black;
+  }
+}
+
+/* ===== HIGH DPI SCREENS ===== */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  .header-icon-btn {
+    border-radius: var(--radius-md);
+  }
+
+  .message-item {
+    border-radius: var(--radius-md);
+  }
+
+  .glass-card {
+    border-radius: var(--radius-xl);
+  }
+}
+
+/* ===== REDUCED MOTION ===== */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .message-item,
+  .glass-card,
+  .header-icon-btn {
+    transition: none;
+  }
+}
+
+/* ===== DARK MODE PREFERENCE ===== */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-primary: #0f172a;
+    --bg-secondary: #1e293b;
+    --text-primary: #f1f5f9;
+    --text-secondary: #cbd5e1;
+  }
+}
+
+/* ===== LIGHT MODE PREFERENCE ===== */
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f8fafc;
+    --text-primary: #1e293b;
+    --text-secondary: #64748b;
+  }
+}
