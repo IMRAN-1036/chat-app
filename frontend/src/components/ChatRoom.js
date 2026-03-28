@@ -386,6 +386,7 @@ export default function ChatRoom({ folder, onBack, addToast }) {
 
     if (!text.trim()) return;
     const mt = text; setText("");
+    setMessages((p) => [...p, { _id: `opt_${Date.now()}`, sender: username, text: mt, timestamp: new Date().toISOString(), readBy: [], reactions: [], replyTo: replyTo || null, type: "text", selfDestruct: selfDestructOn }]);
     setIsAtBottom(true); setNewMsgCount(0); if (soundEnabled) playSound("send");
     const d = { password: folder.password, sender: username, text: mt };
     if (replyTo) d.replyTo = { messageId: replyTo._id, sender: replyTo.sender, text: replyTo.text };
@@ -616,7 +617,7 @@ export default function ChatRoom({ folder, onBack, addToast }) {
           const waveHeights = waveformCache[msg._id] || getWaveformHeights(msg._id || "x");
 
           return (
-            <React.Fragment key={msg._id || i}>
+            <React.Fragment key={i}>
               {shouldShowDate(messages, i) && <div className="date-separator"><span>{getDateLabel(msg.timestamp)}</span></div>}
 
               <SwipeableRow
