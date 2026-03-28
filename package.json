@@ -1,40 +1,13 @@
 {
   "name": "chat-app",
   "version": "1.0.0",
-  "description": "",
-  "main": "backend/index.js",
-  "electron-main": "main.js",
+  "description": "ChatVault - Secure chat application",
+  "private": true,
   "scripts": {
     "start": "npm --prefix backend start",
-    "build": "npm --prefix frontend install && npm --prefix frontend run build && npm --prefix backend install",
-    "electron-start": "electron .",
-    "dist": "electron-builder",
+    "dev": "npm --prefix backend run dev",
+    "build": "npm --prefix frontend install --legacy-peer-deps && npm --prefix frontend run build && npm --prefix backend install",
+    "install:all": "npm --prefix backend install && npm --prefix frontend install --legacy-peer-deps",
     "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "build": {
-    "appId": "com.chatapp.desktop",
-    "productName": "Chat App",
-    "mac": {
-      "target": "dmg",
-      "identity": null
-    },
-    "asar": false,
-    "directories": {
-      "output": "dist"
-    },
-    "files": [
-      "main.js",
-      "package.json",
-      "backend/**/*",
-      "frontend/build/**/*"
-    ]
-  },
-  "devDependencies": {
-    "electron": "^40.8.0",
-    "electron-builder": "^26.8.1"
   }
 }

@@ -12,8 +12,10 @@ services:
       - key: PORT
         value: 3001
       - key: MONGO_URI
-        scope: run
+        sync: false
+      - key: JWT_SECRET
+        sync: false
       - key: FRONTEND_URL
-        value: https://chat-app-n88p.onrender.com
+        value: https://chat-app-beryl-zeta.vercel.app
       - key: ALLOWED_ORIGINS
-        value: https://chat-app-n88p.onrender.com
+        value: https://chat-app-beryl-zeta.vercel.app,http://localhost:3000

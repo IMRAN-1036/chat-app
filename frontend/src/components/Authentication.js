@@ -24,8 +24,9 @@ export default function Authentication({ onAuthenticated }) {
       });
 
       if (response.data.token) {
-        // Store token in cookie
+        // Store token in both cookie and localStorage for API client compatibility
         Cookies.set("authToken", response.data.token, { expires: 1 });
+        localStorage.setItem("chatvault_token", response.data.token);
         onAuthenticated(response.data.username);
       }
     } catch (err) {

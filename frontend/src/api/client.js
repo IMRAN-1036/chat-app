@@ -4,11 +4,12 @@
  */
 
 import axios from 'axios';
+import Cookies from 'js-cookie';
 import { handleApiError } from '../utils/errorHandler';
 import { apiRateLimiter } from '../utils/rateLimit';
 import { API_ENDPOINTS } from '../constants';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:2000';
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
 /**
  * Create axios instance with default configuration
@@ -34,10 +35,13 @@ apiClient.interceptors.request.use(
       return Promise.reject(error);
     }
 
-    // Add auth token if available
-    const token = localStorage.getItem('chatvault_token');
+    // Get auth token from cookie (where Authentication.js stores it)
+    // Fall back to localStorage for compatibility
+    const token = Cookies.get('authToken') || localStorage.getItem('chatvault_token');
     if (token) {
+      // Send as both headers for maximum compatibility
       config.headers.Authorization = `Bearer ${token}`;
+      config.headers['x-auth-token'] = token;
     }
 
     // Add request ID for tracking
@@ -76,8 +80,10 @@ apiClient.interceptors.response.use(
       switch (status) {
         case 401:
           // Unauthorized - clear token and redirect to login
+          Cookies.remove('authToken');
           localStorage.removeItem('chatvault_token');
-          window.location.href = '/login';
+          localStorage.removeItem('username');
+          // Don't redirect — let the app handle re-auth
           break;
 
         case 403:

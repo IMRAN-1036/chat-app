@@ -7,10 +7,16 @@ require('dotenv').config();
 
 const app = express();
 const server = http.createServer(app);
+
+// Parse allowed origins from env (comma-separated) or use defaults
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || process.env.FRONTEND_URL || 'http://localhost:3000')
+  .split(',')
+  .map(origin => origin.trim());
+
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-    methods: ['GET', 'POST'],
+    origin: allowedOrigins,
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true
   }
 });
@@ -21,21 +27,33 @@ app.set('io', io);
 // Middleware
 app.use(express.json({ limit: '50mb' }));
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000', // Frontend URL
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.warn(`CORS blocked origin: ${origin}`);
+      callback(null, false);
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true
 }));
 
 // MongoDB Connection
 mongoose.connect(process.env.MONGO_URI, {
-  family: 4 // Force IPv4 to prevent Render DNS timeout
+  family: 4 // Force IPv4 to prevent DNS timeout
 })
 .then(() => console.log('✅ MongoDB connected'))
 .catch(err => console.error('❌ MongoDB connection error:', err));
 
 // Routes
+const authRoutes = require('./routes/authRoutes');
 const chatRoutes = require('./routes/chatRoutes');
 const enhancedRoutes = require('./routes/enhancedRoutes');
+
+app.use('/api/auth', authRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/chat', enhancedRoutes);
 
@@ -68,7 +86,7 @@ io.on('connection', (socket) => {
 });
 
 // Start Server
-const PORT = process.env.PORT || 2000;
+const PORT = process.env.PORT || 3001;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });

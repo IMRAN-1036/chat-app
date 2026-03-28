@@ -20,7 +20,7 @@ router.post("/register", async (req, res) => {
     const payload = { user: { id: user.id } };
     jwt.sign(
       payload,
-      process.env.JWT_SECRET,
+      process.env.JWT_SECRET || "chatvault-default-secret",
       { expiresIn: "1h" },
       (err, token) => {
         if (err) throw err;
@@ -51,7 +51,7 @@ router.post("/login", async (req, res) => {
     const payload = { user: { id: user.id } };
     jwt.sign(
       payload,
-      process.env.JWT_SECRET,
+      process.env.JWT_SECRET || "chatvault-default-secret",
       { expiresIn: "1h" },
       (err, token) => {
         if (err) throw err;
