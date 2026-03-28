@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import axios from "axios";
+import { post } from "../api/client";
 
 export default function CreateFolder({ addToast }) {
   const [password, setPassword] = useState("");
@@ -20,16 +20,11 @@ export default function CreateFolder({ addToast }) {
 
     setLoading(true);
     try {
-      const API_URL = process.env.REACT_APP_API_URL || "http://localhost:2000";
-      await axios.post(`${API_URL}/api/chat/create`, { password });
+      await post("/api/chat/create", { password });
       addToast("Room created successfully!", "success");
       setPassword("");
     } catch (err) {
-      if (err.response && err.response.data) {
-        addToast(err.response.data.message, "error");
-      } else {
-        addToast("Something went wrong. Try again.", "error");
-      }
+      addToast(err.message || "Something went wrong. Try again.", "error");
     } finally {
       setLoading(false);
     }

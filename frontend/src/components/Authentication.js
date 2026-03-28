@@ -1,8 +1,6 @@
 import React, { useState } from "react";
-import axios from "axios";
 import Cookies from "js-cookie";
-
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:2000";
+import { post } from "../api/client";
 
 export default function Authentication({ onAuthenticated }) {
   const [isLogin, setIsLogin] = useState(true);
@@ -18,77 +16,112 @@ export default function Authentication({ onAuthenticated }) {
 
     try {
       const endpoint = isLogin ? "/api/auth/login" : "/api/auth/register";
-      const response = await axios.post(`${API_URL}${endpoint}`, {
+      // Use the centralized api client 'post'
+      const response = await post(endpoint, {
         username,
         password,
       });
 
-      if (response.data.token) {
+      if (response.token) {
         // Store token in both cookie and localStorage for API client compatibility
-        Cookies.set("authToken", response.data.token, { expires: 1 });
-        localStorage.setItem("chatvault_token", response.data.token);
-        onAuthenticated(response.data.username);
+        Cookies.set("authToken", response.token, { expires: 1 });
+        localStorage.setItem("chatvault_token", response.token);
+        onAuthenticated(response.username);
       }
     } catch (err) {
-      setError(err.response?.data?.message || "An error occurred");
+      setError(err.message || "An error occurred");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="auth-container glass-morphism">
-      <div className="auth-header">
-        <h2>{isLogin ? "Welcome Back" : "Create Account"}</h2>
-        <p>{isLogin ? "Login to your account" : "Join ChatVault today"}</p>
+    <div className="glass-card" style={{ maxWidth: '420px', margin: '0 auto', animation: 'fadeInUp 0.6s ease-out' }}>
+      <div className="card-header" style={{ flexDirection: 'column', textAlign: 'center', marginBottom: '1.8rem', gap: '0.8rem' }}>
+        <div className="app-logo" style={{ margin: '0', width: '56px', height: '56px', fontSize: '1.5rem' }}>🔐</div>
+        <div>
+          <h2 className="app-title" style={{ fontSize: '1.5rem' }}>{isLogin ? "Welcome Back" : "Create Account"}</h2>
+          <p className="app-subtitle" style={{ fontSize: '0.85rem' }}>
+            {isLogin ? "Sign in to access your secure chats" : "Join ChatVault for encrypted messaging"}
+          </p>
+        </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="auth-form">
-        <div className="form-group">
-          <label htmlFor="username">Username</label>
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+        <div className="input-group" style={{ margin: 0 }}>
           <input
             id="username"
             type="text"
             className="styled-input"
-            placeholder="Enter your username"
+            placeholder="Username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             required
+            disabled={loading}
           />
         </div>
 
-        <div className="form-group">
-          <label htmlFor="password">Password</label>
+        <div className="input-group" style={{ margin: 0 }}>
           <input
             id="password"
             type="password"
             className="styled-input"
-            placeholder="Enter your password"
+            placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            disabled={loading}
           />
         </div>
 
-        {error && <div className="error-message">{error}</div>}
+        {error && (
+          <div style={{
+            background: 'rgba(239, 68, 68, 0.1)',
+            border: '1px solid rgba(239, 68, 68, 0.3)',
+            borderRadius: 'var(--radius-md)',
+            padding: '0.8rem',
+            color: '#ef4444',
+            fontSize: '0.85rem',
+            textAlign: 'center',
+            animation: 'shake 0.4s ease'
+          }}>
+            {error}
+          </div>
+        )}
 
-        <button type="submit" className="btn" disabled={loading}>
-          {loading ? "Processing..." : isLogin ? "Login" : "Register"}
+        <button type="submit" className="btn btn-primary" disabled={loading} style={{ marginTop: '0.5rem' }}>
+          {loading ? <div className="spinner"></div> : isLogin ? "Login Now" : "Register Account"}
         </button>
       </form>
 
-      <div className="auth-footer">
+      <div style={{
+        marginTop: '1.8rem',
+        paddingTop: '1.2rem',
+        borderTop: '1px solid var(--glass-border)',
+        textAlign: 'center',
+        fontSize: '0.85rem',
+        color: 'var(--text-secondary)'
+      }}>
         <p>
           {isLogin ? "Don't have an account?" : "Already have an account?"}
           <button
             type="button"
-            className="toggle-btn"
+            className="btn-ghost"
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--accent-1)',
+              fontWeight: 600,
+              cursor: 'pointer',
+              marginLeft: '0.5rem',
+              padding: 0
+            }}
             onClick={() => {
               setIsLogin(!isLogin);
               setError("");
             }}
           >
-            {isLogin ? "Register" : "Login"}
+            {isLogin ? "Register here" : "Login instead"}
           </button>
         </p>
       </div>

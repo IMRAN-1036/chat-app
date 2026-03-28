@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import axios from "axios";
+import { post } from "../api/client";
 
 export default function SearchFolder({ onFound, addToast }) {
   const [password, setPassword] = useState("");
@@ -20,13 +20,12 @@ export default function SearchFolder({ onFound, addToast }) {
 
     setLoading(true);
     try {
-      const API_URL = process.env.REACT_APP_API_URL || "http://localhost:2000";
-      const res = await axios.post(`${API_URL}/api/chat/find`, { password });
+      const res = await post("/api/chat/find", { password });
       addToast("Welcome to the room!", "success");
-      onFound(res.data);
+      onFound(res);
     } catch (err) {
       triggerShake();
-      addToast("Room not found. Check the password.", "error");
+      addToast(err.message || "Room not found. Check the password.", "error");
     } finally {
       setLoading(false);
     }
