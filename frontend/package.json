@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Chat application frontend",
   "private": true,
+  "engines": {
+    "node": "20.x"
+  },
   "proxy": "http://localhost:3001",
   "scripts": {
     "start": "react-scripts start",
