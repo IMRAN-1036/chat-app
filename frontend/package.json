@@ -32,6 +32,8 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
+    "ajv": "^8.12.0",
+    "ajv-keywords": "^5.1.0",
     "eslint": "^10.1.0",
     "eslint-plugin-react": "^7.37.5",
     "jest": "^30.3.0",
