@@ -1,8 +1,9 @@
 {
   "version": 2,
-  "buildCommand": "npm run build",
+  "buildCommand": "cd frontend && npm install --legacy-peer-deps && npm run build",
   "outputDirectory": "frontend/build",
   "framework": "react",
+  "nodeVersion": "24.x",
   "env": {
     "REACT_APP_API_URL": "@react_app_api_url",
     "REACT_APP_SOCKET_URL": "@react_app_socket_url",
